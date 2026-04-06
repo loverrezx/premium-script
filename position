@@ -1,0 +1,126 @@
+local UserInputService = game:GetService("UserInputService")
+local TextService = game:GetService("LogService") -- สำหรับช่วยเรื่องการพิมพ์ Log
+
+local player = game.Players.LocalPlayer
+local pGui = player:WaitForChild("PlayerGui")
+
+-- === [ สร้าง UI ] ===
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "PositionTrackerGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = pGui
+
+-- กรอบหลัก
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 220, 0, 160)
+mainFrame.Position = UDim2.new(0.5, -110, 0.4, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+mainFrame.BorderSizePixel = 2
+mainFrame.Parent = screenGui
+mainFrame.Active = true
+mainFrame.Draggable = true -- สามารถลากย้ายที่ได้
+
+-- หัวข้อ
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 30)
+title.Text = "Position Tracker"
+title.TextColor3 = Color3.new(1, 1, 1)
+title.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+title.Parent = mainFrame
+
+-- ปุ่มปิด (X)
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 30, 0, 30)
+closeBtn.Position = UDim2.new(1, -30, 0, 0)
+closeBtn.Text = "X"
+closeBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+closeBtn.TextColor3 = Color3.new(1, 1, 1)
+closeBtn.Parent = mainFrame
+
+-- แสดงตำแหน่ง Real-time
+local posDisplay = Instance.new("TextLabel")
+posDisplay.Size = UDim2.new(0.9, 0, 0, 40)
+posDisplay.Position = UDim2.new(0.05, 0, 0.25, 0)
+posDisplay.Text = "Waiting..."
+posDisplay.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+posDisplay.TextColor3 = Color3.fromRGB(0, 255, 150)
+posDisplay.Parent = mainFrame
+
+-- ปุ่มดึงตำแหน่ง (Fetch)
+local fetchBtn = Instance.new("TextButton")
+fetchBtn.Size = UDim2.new(0.4, 0, 0, 35)
+fetchBtn.Position = UDim2.new(0.05, 0, 0.65, 0)
+fetchBtn.Text = "ดึงตำแหน่ง"
+fetchBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+fetchBtn.TextColor3 = Color3.new(1, 1, 1)
+fetchBtn.Parent = mainFrame
+
+-- ปุ่มคัดลอก (Copy)
+local copyBtn = Instance.new("TextButton")
+copyBtn.Size = UDim2.new(0.4, 0, 0, 35)
+copyBtn.Position = UDim2.new(0.55, 0, 0.65, 0)
+copyBtn.Text = "คัดลอก"
+copyBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+copyBtn.TextColor3 = Color3.new(1, 1, 1)
+copyBtn.Parent = mainFrame
+
+-- === [ ระบบการทำงาน ] ===
+local currentPosStr = ""
+
+-- อัปเดตตำแหน่ง Real-time
+game:GetService("RunService").Heartbeat:Connect(function()
+	local char = player.Character
+	if char and char:FindFirstChild("HumanoidRootPart") then
+		local p = char.HumanoidRootPart.Position
+		posDisplay.Text = string.format("X: %.2f\nY: %.2f, Z: %.2f", p.X, p.Y, p.Z)
+	end
+end)
+
+-- กดดึงตำแหน่ง
+fetchBtn.MouseButton1Click:Connect(function()
+	local char = player.Character
+	if char and char:FindFirstChild("HumanoidRootPart") then
+		local p = char.HumanoidRootPart.Position
+		currentPosStr = string.format("%.2f, %.2f, %.2f", p.X, p.Y, p.Z)
+		fetchBtn.Text = "ดึงแล้ว!"
+		task.wait(0.5)
+		fetchBtn.Text = "ดึงตำแหน่ง"
+	end
+end)
+
+-- กดคัดลอก
+copyBtn.MouseButton1Click:Connect(function()
+	if currentPosStr ~= "" then
+		-- ใน Roblox การ Copy ลง Clipboard โดยตรงใน Client ปกติจะทำไม่ได้เพื่อความปลอดภัย
+		-- แต่เราจะใช้ SetCore เพื่อส่งข้อความแจ้งเตือน หรือพิมพ์ลง Console ให้ก๊อปง่ายๆ
+		if setclipboard then
+			setclipboard(currentPosStr) -- ใช้ได้ใน Exploit executor บางตัว
+		end
+		print("Copied to clipboard: " .. currentPosStr)
+		
+		local oldText = copyBtn.Text
+		copyBtn.Text = "Copy สำเร็จ!"
+		task.wait(1)
+		copyBtn.Text = oldText
+	else
+		copyBtn.Text = "ดึงค่าก่อน!"
+		task.wait(1)
+		copyBtn.Text = "คัดลอก"
+	end
+end)
+
+-- กดปิด
+closeBtn.MouseButton1Click:Connect(function()
+	mainFrame.Visible = false
+	-- สร้างปุ่มเล็กๆ เพื่อเปิดใหม่
+	local openBtn = Instance.new("TextButton")
+	openBtn.Size = UDim2.new(0, 60, 0, 30)
+	openBtn.Position = UDim2.new(0, 10, 0.9, 0)
+	openBtn.Text = "เปิดพิกัด"
+	openBtn.Parent = screenGui
+	
+	openBtn.MouseButton1Click:Connect(function()
+		mainFrame.Visible = true
+		openBtn:Destroy()
+	end)
+end)
