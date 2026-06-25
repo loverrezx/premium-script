@@ -18,7 +18,6 @@ local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
 
 pcall(function()
     if writefile and isfile and getcustomasset then
@@ -112,7 +111,7 @@ LogoButton.Position = UDim2.new(0, 18, 0.5, -32)
 LogoButton.Visible = false
 LogoButton.Active = true
 LogoButton.Draggable = true
-LogoButton.Parent = LogoGui
+LogoButton.Parent = LogoButton.Parent
 
 local LogoCorner = Instance.new("UICorner")
 LogoCorner.CornerRadius = UDim.new(1, 0)
@@ -1238,11 +1237,10 @@ AutoAnimalsToggle = Tabs.AutoNormal:AddToggle("AutoAnimals", {
 
 Tabs.AutoNormal:AddSection("Garden Protection")
 
--- ==================== [ระบบ GARDEN PROTECTION - เวอร์ชันค่อยๆ ลอยหนีไปยัง CFrame] ====================
+-- ==================== [ระบบ GARDEN PROTECTION - เวอร์ชันดีดฟิสิกส์หลบต้านวาร์ป] ====================
 local GardenProtectionActive = false
 local GardenProtectionThread = nil
 local WhitelistedPlayers = {}
-local GardenProtectionToggle = nil 
 
 local WhitelistDropdown = Tabs.AutoNormal:AddDropdown("GardenWhitelist", {
     Title = "Whitelist Players",
@@ -1275,33 +1273,42 @@ WhitelistDropdown:OnChanged(function(value)
     end
 end)
 
-local function smoothFloatToTarget()
+-- ฟังก์ชันดีดฟิสิกส์ (หลบระบบต้านวาร์ป)
+local function physicsFling(targetChar)
     local lpChar, lpHrp, lpHum = getCharacterParts()
-    if not lpHrp then return end
+    local targetHrp = targetChar:FindFirstChild("HumanoidRootPart")
+    if not lpHrp or not targetHrp then return end
     
-    local targetCFrame = CFrame.new(
-        272.577301, 
-        162.163589, 
-        -148.973526, 
-        -0.838649988, 0.526112318, 0.140970886, 
-        -2.85804272e-05, 0.258775592, -0.965937674, 
-        -0.544671416, -0.810087264, -0.217007399
-    )
+    local savedCFrame = lpHrp.CFrame
     
-    local tweenInfo = TweenInfo.new(
-        3.5, 
-        Enum.EasingStyle.Quad, 
-        Enum.EasingDirection.Out
-    )
+    -- ป้องกันตัวเราล้มลุกคลุกคลานระหว่างชน
+    local oldState = lpHum:GetState()
+    lpHum:ChangeState(Enum.HumanoidStateType.Physics)
     
-    local oldAnchored = lpHrp.Anchored
-    lpHrp.Anchored = true
+    -- สร้างแรงหมุนเชิงฟิสิกส์มหาศาลที่ตัวเรา (ขุนค้อนชนแหลก)
+    local fav = Instance.new("BodyAngularVelocity")
+    fav.MaxTorque = Vector3.new(1, 1, 1) * math.huge
+    fav.AngularVelocity = Vector3.new(0, 999999, 0)
+    fav.Parent = lpHrp
     
-    local tween = TweenService:Create(lpHrp, tweenInfo, {CFrame = targetCFrame})
-    tween:Play()
-    tween.Completed:Wait() 
+    -- อัดความเร็วเสริมแรงปะทะ
+    lpHrp.AssemblyLinearVelocity = Vector3.new(99999, 99999, 99999)
     
-    lpHrp.Anchored = oldAnchored 
+    -- สไลด์ตัวเราเข้าไปสับเปลี่ยนตำแหน่งชน 5 เฟรมแบบรวดเร็ว (ระยะใกล้ 12 studs ระบบไม่เตะ)
+    for i = 1, 5 do
+        if not targetHrp or not targetHrp.Parent or not lpHrp or not lpHrp.Parent then break end
+        lpHrp.CFrame = targetHrp.CFrame * CFrame.new(math.random(-1, 1)/10, 0, math.random(-1, 1)/10)
+        task.wait(0.01)
+    end
+    
+    -- เคลียร์แรงฟิสิกส์ออก
+    fav:Destroy()
+    lpHrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+    lpHrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+    lpHum:ChangeState(oldState)
+    
+    -- ย้ายตัวเรากลับมาสแตนบายที่จุดเดิมในสวนผักของเราทันที
+    lpHrp.CFrame = savedCFrame
 end
 
 local function runGardenProtectionLoop()
@@ -1327,18 +1334,15 @@ local function runGardenProtectionLoop()
                             if hrp then
                                 for _, part in ipairs(partsToCheck) do
                                     local distance = (hrp.Position - part.Position).Magnitude
+                                    -- เมื่อศัตรูเข้ามาในระยะป่วน 12 Studs
                                     if distance < 12 then
-                                        smoothFloatToTarget()
-                                        
-                                        GardenProtectionActive = false
-                                        if GardenProtectionToggle and GardenProtectionToggle.SetValue then
-                                            pcall(function() GardenProtectionToggle:SetValue(false) end)
-                                        end
+                                        -- เรียกใช้มวยปล้ำฟิสิกส์ ชนกระแทกให้กระเด็นออกไปแทนการวาร์ปตรงๆ
+                                        physicsFling(char)
+                                        task.wait(0.5) -- หน่วงเวลาป้องกันสแปมถี่เกินไป
                                         break
                                     end
                                 end
                             end
-                            if not GardenProtectionActive then break end
                         end
                     end
                 end
@@ -1348,9 +1352,9 @@ local function runGardenProtectionLoop()
     end
 end
 
-GardenProtectionToggle = Tabs.AutoNormal:AddToggle("GardenProtectionToggle", {
+Tabs.AutoNormal:AddToggle("GardenProtectionToggle", {
     Title = "Garden Protection",
-    Description = "ฟังก์ชันค่อยๆ ลอยหลบหนีขึ้นไปบนฟ้าเมื่อมีคนแปลกหน้าเข้ามาป่วนใกล้พล็อตผัก",
+    Description = "ฟังก์ชันดีดฟิสิกส์ผู้เล่นแปลกหน้าที่เข้าใกล้สวนของคุณ (ทะลุระบบกันวาร์ป)",
     Default = false,
     Callback = function(value)
         GardenProtectionActive = value
@@ -1363,7 +1367,7 @@ GardenProtectionToggle = Tabs.AutoNormal:AddToggle("GardenProtectionToggle", {
             
             Fluent:Notify({
                 Title = "Garden Protection",
-                Content = "เปิดระบบตรวจจับผู้เล่นเพื่อเตรียมลอยหนีอัตโนมัติแล้ว! (พล็อต: " .. activePlotName .. ")",
+                Content = "เปิดระบบมวยปล้ำฟิสิกส์คุ้มกันสวนผัก! (พล็อต: " .. activePlotName .. ")",
                 Duration = 4
             })
         else
