@@ -1237,7 +1237,7 @@ AutoAnimalsToggle = Tabs.AutoNormal:AddToggle("AutoAnimals", {
 
 Tabs.AutoNormal:AddSection("Garden Protection")
 
--- ==================== [ระบบ GARDEN PROTECTION - เวอร์ชันส่งไปอวกาศ] ====================
+-- ==================== [ระบบ GARDEN PROTECTION - เวอร์ชันดีดฟิสิกส์หลบต้านวาร์ป] ====================
 local GardenProtectionActive = false
 local GardenProtectionThread = nil
 local WhitelistedPlayers = {}
@@ -1273,7 +1273,44 @@ WhitelistDropdown:OnChanged(function(value)
     end
 end)
 
--- ฟังก์ชันตรวจจับคนบุกรุก และดีดหายไปบนหน้าจอเราทันที
+-- ฟังก์ชันดีดฟิสิกส์ (หลบระบบต้านวาร์ป)
+local function physicsFling(targetChar)
+    local lpChar, lpHrp, lpHum = getCharacterParts()
+    local targetHrp = targetChar:FindFirstChild("HumanoidRootPart")
+    if not lpHrp or not targetHrp then return end
+    
+    local savedCFrame = lpHrp.CFrame
+    
+    -- ป้องกันตัวเราล้มลุกคลุกคลานระหว่างชน
+    local oldState = lpHum:GetState()
+    lpHum:ChangeState(Enum.HumanoidStateType.Physics)
+    
+    -- สร้างแรงหมุนเชิงฟิสิกส์มหาศาลที่ตัวเรา (ขุนค้อนชนแหลก)
+    local fav = Instance.new("BodyAngularVelocity")
+    fav.MaxTorque = Vector3.new(1, 1, 1) * math.huge
+    fav.AngularVelocity = Vector3.new(0, 999999, 0)
+    fav.Parent = lpHrp
+    
+    -- อัดความเร็วเสริมแรงปะทะ
+    lpHrp.AssemblyLinearVelocity = Vector3.new(99999, 99999, 99999)
+    
+    -- สไลด์ตัวเราเข้าไปสับเปลี่ยนตำแหน่งชน 5 เฟรมแบบรวดเร็ว (ระยะใกล้ 12 studs ระบบไม่เตะ)
+    for i = 1, 5 do
+        if not targetHrp or not targetHrp.Parent or not lpHrp or not lpHrp.Parent then break end
+        lpHrp.CFrame = targetHrp.CFrame * CFrame.new(math.random(-1, 1)/10, 0, math.random(-1, 1)/10)
+        task.wait(0.01)
+    end
+    
+    -- เคลียร์แรงฟิสิกส์ออก
+    fav:Destroy()
+    lpHrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+    lpHrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+    lpHum:ChangeState(oldState)
+    
+    -- ย้ายตัวเรากลับมาสแตนบายที่จุดเดิมในสวนผักของเราทันที
+    lpHrp.CFrame = savedCFrame
+end
+
 local function runGardenProtectionLoop()
     while GardenProtectionActive do
         pcall(function()
@@ -1293,15 +1330,15 @@ local function runGardenProtectionLoop()
                         if player ~= Players.LocalPlayer and not WhitelistedPlayers[player.Name] then
                             local char = player.Character
                             local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                            local hum = char and char:FindFirstChild("Humanoid")
                             
-                            if hrp and hum then
+                            if hrp then
                                 for _, part in ipairs(partsToCheck) do
                                     local distance = (hrp.Position - part.Position).Magnitude
-                                    -- ตรวจจับในระยะใกล้สวน 12 Studs
+                                    -- เมื่อศัตรูเข้ามาในระยะป่วน 12 Studs
                                     if distance < 12 then
-                                        -- [แก้ไขใหม่] ดีดผู้เล่นคนนั้นขึ้นไปบนอวกาศพิกัด Y = 999,999 ห่างไกลจากทุก Part ในแมพ
-                                        hrp.CFrame = CFrame.new(0, 999999, 0)
+                                        -- เรียกใช้มวยปล้ำฟิสิกส์ ชนกระแทกให้กระเด็นออกไปแทนการวาร์ปตรงๆ
+                                        physicsFling(char)
+                                        task.wait(0.5) -- หน่วงเวลาป้องกันสแปมถี่เกินไป
                                         break
                                     end
                                 end
@@ -1317,7 +1354,7 @@ end
 
 Tabs.AutoNormal:AddToggle("GardenProtectionToggle", {
     Title = "Garden Protection",
-    Description = "ฟังชั่นค์ดีดผู้เล่นแปลกหน้าที่เข้าใกล้สวนของคุณ ขึ้นไปบนอวกาศ",
+    Description = "ฟังก์ชันดีดฟิสิกส์ผู้เล่นแปลกหน้าที่เข้าใกล้สวนของคุณ (ทะลุระบบกันวาร์ป)",
     Default = false,
     Callback = function(value)
         GardenProtectionActive = value
@@ -1330,7 +1367,7 @@ Tabs.AutoNormal:AddToggle("GardenProtectionToggle", {
             
             Fluent:Notify({
                 Title = "Garden Protection",
-                Content = "เปิดระบบคุ้มกันสวนสำเร็จ! (กำลังเฝ้าพล็อต: " .. activePlotName .. ")",
+                Content = "เปิดระบบมวยปล้ำฟิสิกส์คุ้มกันสวนผัก! (พล็อต: " .. activePlotName .. ")",
                 Duration = 4
             })
         else
