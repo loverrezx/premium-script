@@ -757,7 +757,7 @@ local AnimalOptions = {
 }
 local AnimalOptionLabels = {}
 local AnimalOptionsByLabel = {}
-local SelectedAnimal
+local SelectedAnimals = {}  -- เปลี่ยนเป็น table เก็บหลายตัวเลือก
 local AutoAnimalsToggle
 
 local function formatNumber(value)
@@ -1077,11 +1077,11 @@ local function holdInteractableUntilGone(obj, objType)
     end
 end
 
--- Loop หลักของ Auto Animals
+-- Loop หลักของ Auto Animals (ปรับปรุงใหม่เพื่อรองรับหลายตัวเลือก)
 local function runAutoAnimalsLoop()
     while AutoAnimalsActive do
-        -- ตรวจสอบว่ายังมี SelectedAnimal
-        if not SelectedAnimal then
+        -- ตรวจสอบว่าเลือกสัตว์ไว้บ้างไหม
+        if #SelectedAnimals == 0 then
             AutoAnimalsActive = false
             if AutoAnimalsToggle and AutoAnimalsToggle.SetValue then
                 pcall(function() AutoAnimalsToggle:SetValue(false) end)
@@ -1090,56 +1090,54 @@ local function runAutoAnimalsLoop()
             break
         end
 
-        -- ตรวจสอบเงิน realtime
-        if not canAffordAnimal(SelectedAnimal) then
-            Fluent:Notify({
-                Title = "Animals",
-                Content = "เงินไม่พอสำหรับ " .. SelectedAnimal.Name .. " ปิดอัตโนมัติ",
-                Duration = 5
-            })
-            SelectedAnimal = nil
-            AutoAnimalsActive = false
-            if AutoAnimalsToggle and AutoAnimalsToggle.SetValue then
-                pcall(function() AutoAnimalsToggle:SetValue(false) end)
-            end
-            break
-        end
+        local foundAnyTarget = false
 
-        -- หาสัตว์ใน workspace
-        local targets = findTargetAnimal(SelectedAnimal.Name)
+        -- วนลูปเช็คสัตว์ทุกตัวที่ถูกเลือกไว้ตามลำดับ
+        for _, animal in ipairs(SelectedAnimals) do
+            if not AutoAnimalsActive then break end
 
-        if #targets > 0 then
-            local target = targets[1]
-            local targetPart = target.part
+            -- ตรวจสอบเรื่องเงินของสัตว์ตัวนั้นๆ ในลูป
+            if canAffordAnimal(animal) then
+                local targets = findTargetAnimal(animal.Name)
 
-            -- ติดตามสัตว์แบบ smooth
-            if targetPart and targetPart.Parent then
-                -- เดินไปหาสัตว์
-                smoothMoveTo(targetPart)
+                if #targets > 0 then
+                    foundAnyTarget = true
+                    local target = targets[1]
+                    local targetPart = target.part
 
-                -- เมื่อถึงที่แล้ว หา interactable (ProximityPrompt / ClickDetector / GuiButton)
-                if AutoAnimalsActive then
-                    local interactable, interactType = findNearbyInteractable()
-                    if interactable then
-                        holdInteractableUntilGone(interactable, interactType)
-                    else
-                        -- ลองรอสักครู่แล้วหาใหม่ (บางครั้ง prompt โหลดช้า)
-                        task.wait(0.5)
-                        interactable, interactType = findNearbyInteractable()
-                        if interactable then
-                            holdInteractableUntilGone(interactable, interactType)
+                    if targetPart and targetPart.Parent then
+                        -- เดินไปหาสัตว์ตัวที่เจอ
+                        smoothMoveTo(targetPart)
+
+                        -- ฟาร์มเมื่อถึงเป้าหมาย
+                        if AutoAnimalsActive then
+                            local interactable, interactType = findNearbyInteractable()
+                            if interactable then
+                                holdInteractableUntilGone(interactable, interactType)
+                            else
+                                task.wait(0.5)
+                                interactable, interactType = findNearbyInteractable()
+                                if interactable then
+                                    holdInteractableUntilGone(interactable, interactType)
+                                end
+                            end
                         end
+
+                        -- กลับสปอว์นหลังเก็บเสร็จ
+                        if AutoAnimalsActive then
+                            warpToSpawn()
+                            task.wait(1)
+                        end
+                        
+                        -- ออกจากลูปย่อยเพื่อไปเริ่มสแกนใหม่จากสัตว์ตัวแรก
+                        break
                     end
                 end
-
-                -- warp กลับ SpawnPoint หลังจากเก็บสัตว์
-                if AutoAnimalsActive then
-                    warpToSpawn()
-                    task.wait(1)
-                end
             end
-        else
-            -- ไม่พบสัตว์ รอแล้วลองใหม่
+        end
+
+        -- ถ้าไม่พบสัตว์ตัวไหนที่เลือกไว้เลย ให้รอซักครู่แล้วเริ่มค้นหาใหม่
+        if not foundAnyTarget and AutoAnimalsActive then
             task.wait(1)
         end
 
@@ -1153,10 +1151,10 @@ local function setAutoAnimalsEnabled(enabled)
         return
     end
 
-    if not SelectedAnimal then
+    if #SelectedAnimals == 0 then
         Fluent:Notify({
             Title = "Animals",
-            Content = "กรุณาเลือก Name Animals ก่อน",
+            Content = "กรุณาเลือก Name Animals อย่างน้อย 1 ตัว",
             Duration = 4
         })
         if AutoAnimalsToggle and AutoAnimalsToggle.SetValue then
@@ -1165,13 +1163,21 @@ local function setAutoAnimalsEnabled(enabled)
         return
     end
 
-    if not canAffordAnimal(SelectedAnimal) then
+    -- เช็คว่ามีสัตว์ที่เลือกไว้อย่างน้อยหนึ่งตัวที่มีเงินพอมั้ย
+    local canAffordAny = false
+    for _, animal in ipairs(SelectedAnimals) do
+        if canAffordAnimal(animal) then
+            canAffordAny = true
+            break
+        end
+    end
+
+    if not canAffordAny then
         Fluent:Notify({
             Title = "Animals",
-            Content = "เงินไม่พอสำหรับ " .. SelectedAnimal.Name .. " (" .. formatNumber(SelectedAnimal.Price) .. " Sheckles)",
+            Content = "เงินของคุณไม่พอสำหรับสัตว์ประเภทใดๆ ที่คุณเลือกไว้เลย",
             Duration = 5
         })
-        SelectedAnimal = nil
         if AutoAnimalsToggle and AutoAnimalsToggle.SetValue then
             pcall(function() AutoAnimalsToggle:SetValue(false) end)
         end
@@ -1182,11 +1188,10 @@ local function setAutoAnimalsEnabled(enabled)
 
     Fluent:Notify({
         Title = "Animals",
-        Content = "เริ่มทำงาน Auto Animals: " .. SelectedAnimal.Name,
+        Content = "เริ่มทำงาน Auto Animals แบบหลายตัวเลือกเรียบร้อย",
         Duration = 4
     })
 
-    -- รัน loop ใน thread แยก
     if AutoAnimalsThread then
         task.cancel(AutoAnimalsThread)
     end
@@ -1202,41 +1207,26 @@ end
 
 Tabs.AutoNormal:AddSection("Animals")
 
+-- เปลี่ยนค่า Multi เป็น true เพื่อให้เลือกได้หลายตัวเลือก
 local NameAnimalsDropdown = Tabs.AutoNormal:AddDropdown("NameAnimals", {
     Title = "Name Animals",
     Values = AnimalOptionLabels,
-    Multi = false,
-    Default = nil
+    Multi = true,
+    Default = {}
 })
 
 if NameAnimalsDropdown and NameAnimalsDropdown.OnChanged then
     NameAnimalsDropdown:OnChanged(function(value)
-        local animal = AnimalOptionsByLabel[value]
-
-        if not animal then
-            SelectedAnimal = nil
-            return
-        end
-
-        if not canAffordAnimal(animal) then
-            Fluent:Notify({
-                Title = "Animals",
-                Content = animal.Name .. " needs " .. formatNumber(animal.Price) .. " Sheckles.",
-                Duration = 4
-            })
-
-            SelectedAnimal = nil
-
-            if NameAnimalsDropdown.SetValue then
-                pcall(function()
-                    NameAnimalsDropdown:SetValue(nil)
-                end)
+        SelectedAnimals = {}
+        -- ดึงข้อมูลสัตว์ทุกตัวที่ถูกติ๊กเลือก (ค่าจะเป็น true ในตาราง)
+        for label, selected in pairs(value) do
+            if selected then
+                local animal = AnimalOptionsByLabel[label]
+                if animal then
+                    table.insert(SelectedAnimals, animal)
+                end
             end
-
-            return
         end
-
-        SelectedAnimal = animal
     end)
 end
 
