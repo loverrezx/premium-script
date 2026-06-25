@@ -112,7 +112,7 @@ LogoButton.Position = UDim2.new(0, 18, 0.5, -32)
 LogoButton.Visible = false
 LogoButton.Active = true
 LogoButton.Draggable = true
-LogoButton.Parent = LogoButton.Parent
+LogoButton.Parent = LogoGui
 
 local LogoCorner = Instance.new("UICorner")
 LogoCorner.CornerRadius = UDim.new(1, 0)
@@ -440,7 +440,7 @@ end
 local function alignTitleLabels()
     local windowRoot = findWindowRoot()
 
-    if not windowRoot loop then
+    if not windowRoot then
         return
     end
 
@@ -1242,7 +1242,7 @@ Tabs.AutoNormal:AddSection("Garden Protection")
 local GardenProtectionActive = false
 local GardenProtectionThread = nil
 local WhitelistedPlayers = {}
-local GardenProtectionToggle = nil -- ประกาศตัวแปรรับปุ่มสวิตช์เปิดปิด
+local GardenProtectionToggle = nil 
 
 local WhitelistDropdown = Tabs.AutoNormal:AddDropdown("GardenWhitelist", {
     Title = "Whitelist Players",
@@ -1275,15 +1275,13 @@ WhitelistDropdown:OnChanged(function(value)
     end
 end)
 
--- ฟังก์ชันสำหรับค่อยๆ ลอยตัวเคลื่อนที่หนี (ใช้ระบบ TweenService ร่วมกับ Anchor ตัวละครชั่วคราวเพื่อความเนียน)
 local function smoothFloatToTarget()
     local lpChar, lpHrp, lpHum = getCharacterParts()
     if not lpHrp then return end
     
-    -- พิกัด CFrame ตามที่คุณส่งมา แต่ทำการบวกค่าความสูงแกน Y เพิ่มให้อีก 10 เมตร (จากเดิม 152.163589 เป็น 162.163589)
     local targetCFrame = CFrame.new(
         272.577301, 
-        162.163589, -- ปรับสูงขึ้น 10 เมตรเรียบร้อย
+        162.163589, 
         -148.973526, 
         -0.838649988, 0.526112318, 0.140970886, 
         -2.85804272e-05, 0.258775592, -0.965937674, 
@@ -1291,20 +1289,19 @@ local function smoothFloatToTarget()
     )
     
     local tweenInfo = TweenInfo.new(
-        3.5, -- เวลาในการค่อยๆ ลอยไปจนถึงเป้าหมาย (หน่วยเป็นวินาที สามารถปรับความเร็วได้ตามใจชอบ)
+        3.5, 
         Enum.EasingStyle.Quad, 
         Enum.EasingDirection.Out
     )
     
-    -- ล็อกตัวละครให้อยู่ในสถานะ Anchored ชั่วคราวเพื่อต้านระบบแรงโน้มถ่วงฟิสิกส์ และลอยไปอย่างเสถียร
     local oldAnchored = lpHrp.Anchored
     lpHrp.Anchored = true
     
     local tween = TweenService:Create(lpHrp, tweenInfo, {CFrame = targetCFrame})
     tween:Play()
-    tween.Completed:Wait() -- รอจนกว่าจะลอยเสร็จสิ้น
+    tween.Completed:Wait() 
     
-    lpHrp.Anchored = oldAnchored -- ปลดล็อกกลับคืนสถานะปกติ
+    lpHrp.Anchored = oldAnchored 
 end
 
 local function runGardenProtectionLoop()
@@ -1330,13 +1327,9 @@ local function runGardenProtectionLoop()
                             if hrp then
                                 for _, part in ipairs(partsToCheck) do
                                     local distance = (hrp.Position - part.Position).Magnitude
-                                    -- ตรวจสอบหากมีผู้เล่นอื่น (ที่ไม่ได้ไวท์ลิสต์) บุกรุกเข้ามาใกล้สวนในระยะ 12 สตั๊ด
                                     if distance < 12 then
-                                        
-                                        -- ค่อยๆ ลอยหลบหนีไปยังพิกัดเป้าหมายเหนือฟ้าทันที
                                         smoothFloatToTarget()
                                         
-                                        -- ปิดระบบเพื่อป้องกันการดีดกลับหรือทำงานซ้ำซ้อนขณะพ้นขีดอันตรายแล้ว
                                         GardenProtectionActive = false
                                         if GardenProtectionToggle and GardenProtectionToggle.SetValue then
                                             pcall(function() GardenProtectionToggle:SetValue(false) end)
