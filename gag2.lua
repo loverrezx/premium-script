@@ -111,7 +111,7 @@ LogoButton.Position = UDim2.new(0, 18, 0.5, -32)
 LogoButton.Visible = false
 LogoButton.Active = true
 LogoButton.Draggable = true
-LogoButton.Parent = LogoGui
+LogoButton.Parent = LogoButton.Parent
 
 local LogoCorner = Instance.new("UICorner")
 LogoCorner.CornerRadius = UDim.new(1, 0)
@@ -794,7 +794,6 @@ pcall(function()
     VirtualInputManager = game:GetService("VirtualInputManager")
 end)
 
--- ฟังก์ชันหา character และ HRP ของผู้เล่น
 local function getCharacterParts()
     local player = Players.LocalPlayer
     local char = player.Character or player.CharacterAdded:Wait()
@@ -803,12 +802,10 @@ local function getCharacterParts()
     return char, hrp, hum
 end
 
--- [เพิ่มฟังก์ชันพิเศษ] ระบบตรวจหา Plot ของผู้เล่นปัจจุบันโดยอัตโนมัติ (Plot1 - Plot8)
 local function getMyPlot()
     local gardens = workspace:FindFirstChild("Gardens")
     if not gardens then return nil end
 
-    -- วิธีที่ 1: ตรวจจาก RespawnLocation ของระบบ Roblox (ตรงและแม่นยำที่สุด)
     local respawnLoc = Players.LocalPlayer.RespawnLocation
     if respawnLoc and respawnLoc:IsDescendantOf(gardens) then
         local p = respawnLoc.Parent
@@ -817,7 +814,6 @@ local function getMyPlot()
         end
     end
 
-    -- วิธีที่ 2: สแกนหาค่า Owner หรือชื่อผู้เล่นที่ถูกบันทึกไว้ในแปลงผัก (เผื่อตัวเกมเซ็ตไว้)
     for i = 1, 8 do
         local plot = gardens:FindFirstChild("Plot" .. i)
         if plot then
@@ -830,7 +826,6 @@ local function getMyPlot()
         end
     end
 
-    -- วิธีที่ 3: เช็คหาระยะพล็อตที่อยู่ใกล้เคียงตัวละครที่สุด ณ ตอนนั้น (ความแม่นยำสูงเมื่อเพิ่งสปอว์น)
     local char = Players.LocalPlayer.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
     if hrp then
@@ -852,11 +847,9 @@ local function getMyPlot()
         end
     end
 
-    -- ค่าเริ่มต้นหากไม่พบเงื่อนไขใดๆ เลยเพื่อป้องกันบั๊ก
     return gardens:FindFirstChild("Plot1")
 end
 
--- ฟังก์ชัน warp กลับ SpawnPoint (อัปเดตให้รองรับ Plot ไดนามิกอัตโนมัติ)
 local function warpToSpawn()
     pcall(function()
         local myPlot = getMyPlot()
@@ -871,21 +864,16 @@ local function warpToSpawn()
     end)
 end
 
--- ฟังก์ชันดึง WildPet ชื่อตรงกับที่เลือกทั้งหมด
 local function findTargetAnimals()
     local found = {}
 
-    -- หาใน workspace ทั้งหมด
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("Model") or obj:IsA("BasePart") then
             local name = obj.Name
-            -- รูปแบบ: WildPet_Owl_WildPet_747c46e3-...
-            -- ดึงชื่อหลัง _ ตัวแรก
             local extractedName = name:match("^WildPet_([^_]+)_")
             if extractedName and SelectedAnimals[extractedName:lower()] then
                 local animal = SelectedAnimals[extractedName:lower()]
                 if canAffordAnimal(animal) then
-                    -- ถ้าเป็น Model ให้หา PrimaryPart หรือ Part ใดๆ
                     if obj:IsA("Model") then
                         local part = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
                         if part then
@@ -902,7 +890,6 @@ local function findTargetAnimals()
     return found
 end
 
--- ฟังก์ชัน smooth follow ไปหาสัตว์ (ลอยไปแบบเร็ว)
 local function smoothMoveTo(targetPart)
     local _, hrp, _ = getCharacterParts()
     if not hrp or not targetPart then return end
@@ -920,7 +907,6 @@ local function smoothMoveTo(targetPart)
 
         if dist < 5 then break end
 
-        -- ลอยไปด้วย lerp เร็ว
         local alpha = math.min(0.35, dist / 20)
         local newPos = currentPos:Lerp(targetPos, alpha)
         hrp.CFrame = CFrame.new(newPos, targetPos)
@@ -930,8 +916,6 @@ local function smoothMoveTo(targetPart)
     end
 end
 
--- ฟังก์ชันหา ProximityPrompt (ปุ่ม E) ใกล้ผู้เล่น
--- หาตำแหน่งของ object (BasePart หรือ Model)
 local function getObjectPosition(obj)
     if obj:IsA("BasePart") then
         return obj.Position
@@ -942,7 +926,6 @@ local function getObjectPosition(obj)
     return nil
 end
 
--- หา interactable ทุกประเภทใกล้ผู้เล่น (ProximityPrompt, ClickDetector, BillboardGui Button, ScreenGui Button)
 local function findNearbyInteractable()
     local _, hrp, _ = getCharacterParts()
     if not hrp then return nil, nil end
@@ -951,7 +934,6 @@ local function findNearbyInteractable()
     local bestType = nil
     local bestDist = 25
 
-    -- 1) ProximityPrompt ใน workspace
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("ProximityPrompt") and obj.Enabled then
             local parent = obj.Parent
@@ -978,7 +960,6 @@ local function findNearbyInteractable()
         end
     end
 
-    -- 2) BillboardGui / SurfaceGui ที่มี TextButton/ImageButton ใน workspace
     if not bestObj then
         for _, gui in ipairs(workspace:GetDescendants()) do
             if (gui:IsA("BillboardGui") or gui:IsA("SurfaceGui")) then
@@ -987,7 +968,6 @@ local function findNearbyInteractable()
                 if pos then
                     local dist = (pos - hrp.Position).Magnitude
                     if dist < bestDist then
-                        -- หา button ลูกใน gui
                         for _, child in ipairs(gui:GetDescendants()) do
                             if (child:IsA("TextButton") or child:IsA("ImageButton")) and child.Visible then
                                 bestDist = dist
@@ -1002,14 +982,12 @@ local function findNearbyInteractable()
         end
     end
 
-    -- 3) ScreenGui ที่ปรากฏอยู่ใน PlayerGui (เช่น popup กด E)
     if not bestObj then
         local playerGui = Players.LocalPlayer:FindFirstChild("PlayerGui")
         if playerGui then
             for _, gui in ipairs(playerGui:GetDescendants()) do
                 if (gui:IsA("TextButton") or gui:IsA("ImageButton")) and gui.Visible then
                     local text = tostring(gui.Text):upper()
-                    -- กรองเฉพาะ button ที่น่าจะเป็น interact (มีข้อความสั้นๆ หรือว่างเปล่า)
                     if text == "E" or text == "" or text:find("HOLD") or text:find("PRESS") or text:find("COLLECT") or text:find("CATCH") then
                         bestObj = gui
                         bestType = "ScreenButton"
@@ -1023,22 +1001,19 @@ local function findNearbyInteractable()
     return bestObj, bestType
 end
 
--- กด/ค้าง interactable จนกว่าจะหายไป
 local function holdInteractableUntilGone(obj, objType)
     if not obj then return end
 
     local holdStart = os.clock()
-    local maxHold = 10 -- timeout สูงสุด 10 วิ
+    local maxHold = 10
 
     if objType == "ProximityPrompt" then
         local holdDuration = (obj.HoldDuration or 0)
 
-        -- วิธีที่ 1: fireproximityprompt (ทำงานได้บน executor ส่วนใหญ่)
         local usedFire = false
         pcall(function()
             if fireproximityprompt then
                 if holdDuration > 0 then
-                    -- ต้อง fire ค้างไว้ตาม duration
                     local fireStart = os.clock()
                     while AutoAnimalsActive and obj and obj.Parent do
                         fireproximityprompt(obj)
@@ -1052,7 +1027,6 @@ local function holdInteractableUntilGone(obj, objType)
             end
         end)
 
-        -- วิธีที่ 2: VirtualInputManager กด E ค้าง
         if not usedFire then
             pcall(function()
                 if VirtualInputManager then
@@ -1064,7 +1038,6 @@ local function holdInteractableUntilGone(obj, objType)
             end)
         end
 
-        -- วิธีที่ 3: Keypress ผ่าน UserInputService simulate
         if not usedFire then
             pcall(function()
                 local inputObject = {
@@ -1079,7 +1052,6 @@ local function holdInteractableUntilGone(obj, objType)
             end)
         end
 
-        -- รอจน prompt หายไป (timeout 8 วิ)
         local waited = 0
         while obj and obj.Parent and waited < 80 and AutoAnimalsActive do
             task.wait(0.1)
@@ -1087,7 +1059,6 @@ local function holdInteractableUntilGone(obj, objType)
         end
 
     elseif objType == "ClickDetector" then
-        -- ใช้ fireclickdetector
         local fired = false
         pcall(function()
             if fireclickdetector then
@@ -1101,7 +1072,6 @@ local function holdInteractableUntilGone(obj, objType)
             end)
         end
 
-        -- ค้างไว้จนหาย timeout 8 วิ
         local waited = 0
         while obj and obj.Parent and waited < 80 and AutoAnimalsActive do
             task.wait(0.1)
@@ -1109,21 +1079,17 @@ local function holdInteractableUntilGone(obj, objType)
         end
 
     elseif objType == "GuiButton" or objType == "ScreenButton" then
-        -- คลิก GUI Button ค้างจนหาย
         local function clickButton()
             pcall(function()
-                -- วิธีที่ 1: fire MouseButton1Click โดยตรง
                 obj.MouseButton1Click:Fire()
             end)
             pcall(function()
-                -- วิธีที่ 2: fire MouseButton1Down + Up
                 obj.MouseButton1Down:Fire(0, 0)
                 task.wait(0.05)
                 obj.MouseButton1Up:Fire(0, 0)
             end)
         end
 
-        -- คลิกค้างจนกว่า button จะหายไป
         while obj and obj.Parent and obj.Visible and AutoAnimalsActive do
             if os.clock() - holdStart >= maxHold then break end
             clickButton()
@@ -1132,10 +1098,8 @@ local function holdInteractableUntilGone(obj, objType)
     end
 end
 
--- Loop หลักของ Auto Animals
 local function runAutoAnimalsLoop()
     while AutoAnimalsActive do
-        -- ตรวจสอบว่ายังมีสัตว์ที่เลือกอยู่หรือไม่
         local hasSelected = false
         for _, _ in pairs(SelectedAnimals) do
             hasSelected = true
@@ -1151,25 +1115,20 @@ local function runAutoAnimalsLoop()
             break
         end
 
-        -- หาสัตว์ใน workspace
         local targets = findTargetAnimals()
 
         if #targets > 0 then
             local target = targets[1]
             local targetPart = target.part
 
-            -- ติดตามสัตว์แบบ smooth
             if targetPart and targetPart.Parent then
-                -- เดินไปหาสัตว์
                 smoothMoveTo(targetPart)
 
-                -- เมื่อถึงที่แล้ว หา interactable (ProximityPrompt / ClickDetector / GuiButton)
                 if AutoAnimalsActive then
                     local interactable, interactType = findNearbyInteractable()
                     if interactable then
                         holdInteractableUntilGone(interactable, interactType)
                     else
-                        -- ลองรอสักครู่แล้วหาใหม่ (บางครั้ง prompt โหลดช้า)
                         task.wait(0.5)
                         interactable, interactType = findNearbyInteractable()
                         if interactable then
@@ -1178,14 +1137,12 @@ local function runAutoAnimalsLoop()
                     end
                 end
 
-                -- warp กลับ SpawnPoint หลังจากเก็บสัตว์
                 if AutoAnimalsActive then
                     warpToSpawn()
                     task.wait(1)
                 end
             end
         else
-            -- ไม่พบสัตว์ รอแล้วลองใหม่
             task.wait(1)
         end
 
@@ -1225,7 +1182,6 @@ local function setAutoAnimalsEnabled(enabled)
         Duration = 4
     })
 
-    -- รัน loop ใน thread แยก
     if AutoAnimalsThread then
         task.cancel(AutoAnimalsThread)
     end
@@ -1281,12 +1237,11 @@ AutoAnimalsToggle = Tabs.AutoNormal:AddToggle("AutoAnimals", {
 
 Tabs.AutoNormal:AddSection("Garden Protection")
 
--- ==================== [ระบบ GARDEN PROTECTION - เวอร์ชันรองรับหลายพล็อต] ====================
+-- ==================== [ระบบ GARDEN PROTECTION - เวอร์ชันส่งไปอวกาศ] ====================
 local GardenProtectionActive = false
 local GardenProtectionThread = nil
 local WhitelistedPlayers = {}
 
--- แถบเลือก User ที่อนุญาต (Whitelist)
 local WhitelistDropdown = Tabs.AutoNormal:AddDropdown("GardenWhitelist", {
     Title = "Whitelist Players",
     Description = "เลือกผู้เล่นที่จะอนุญาตให้เข้าสวนของเราได้",
@@ -1295,7 +1250,6 @@ local WhitelistDropdown = Tabs.AutoNormal:AddDropdown("GardenWhitelist", {
     Default = {}
 })
 
--- ฟังก์ชันดึงและอัปเดตรายชื่อผู้เล่นแบบ Real-time
 local function updatePlayerDropdown()
     local list = {}
     for _, p in ipairs(Players:GetPlayers()) do
@@ -1306,12 +1260,10 @@ local function updatePlayerDropdown()
     WhitelistDropdown:SetValues(list)
 end
 
--- ผูกการทำงานเชื่อมต่อตรวจคนเข้า/ออกจากเซิร์ฟเวอร์
 table.insert(RuntimeConnections, Players.PlayerAdded:Connect(updatePlayerDropdown))
 table.insert(RuntimeConnections, Players.PlayerRemoving:Connect(updatePlayerDropdown))
 updatePlayerDropdown()
 
--- บันทึกค่าผู้เล่นที่ถูกเลือกใน Whitelist
 WhitelistDropdown:OnChanged(function(value)
     WhitelistedPlayers = {}
     for name, enabled in pairs(value) do
@@ -1321,11 +1273,10 @@ WhitelistDropdown:OnChanged(function(value)
     end
 end)
 
--- ฟังก์ชันตรวจสอบและกำจัดคนแปลกหน้าที่เหยียบแปลงผัก (ตรวจสอบเจาะจงที่พล็อตตัวเองเท่านั้น)
+-- ฟังก์ชันตรวจจับคนบุกรุก และดีดหายไปบนหน้าจอเราทันที
 local function runGardenProtectionLoop()
     while GardenProtectionActive do
         pcall(function()
-            -- หาพล็อตของตัวเองแบบไดนามิก (Plot1 - Plot8)
             local myPlot = getMyPlot()
             local visualFolder = myPlot and myPlot:FindFirstChild("Visual")
             
@@ -1339,18 +1290,18 @@ local function runGardenProtectionLoop()
                 
                 if #partsToCheck > 0 then
                     for _, player in ipairs(Players:GetPlayers()) do
-                        -- ต้องไม่ใช่เราเอง และต้องไม่อยู่ในรายชื่อ Whitelist
                         if player ~= Players.LocalPlayer and not WhitelistedPlayers[player.Name] then
                             local char = player.Character
                             local hrp = char and char:FindFirstChild("HumanoidRootPart")
                             local hum = char and char:FindFirstChild("Humanoid")
                             
-                            if hrp and hum and hum.Health > 0 then
+                            if hrp and hum then
                                 for _, part in ipairs(partsToCheck) do
                                     local distance = (hrp.Position - part.Position).Magnitude
-                                    -- ระยะเซนเซอร์เซฟตี้ 12 Studs รอบแปลงดิน
+                                    -- ตรวจจับในระยะใกล้สวน 12 Studs
                                     if distance < 12 then
-                                        hum.Health = 0 -- สั่งตายทันที
+                                        -- [แก้ไขใหม่] ดีดผู้เล่นคนนั้นขึ้นไปบนอวกาศพิกัด Y = 999,999 ห่างไกลจากทุก Part ในแมพ
+                                        hrp.CFrame = CFrame.new(0, 999999, 0)
                                         break
                                     end
                                 end
@@ -1360,14 +1311,13 @@ local function runGardenProtectionLoop()
                 end
             end
         end)
-        task.wait(0.1) -- เช็ควนลูปอย่างรวดเร็วทุกๆ 0.1 วินาที
+        task.wait(0.1)
     end
 end
 
--- ปุ่ม Toggle สำหรับเปิด-ปิด ระบบ Garden Protection
 Tabs.AutoNormal:AddToggle("GardenProtectionToggle", {
     Title = "Garden Protection",
-    Description = "ฟังชั่นค์การป้องกันผู้เล่น เข้าสวนเพื่อขโมยผลไม้",
+    Description = "ฟังชั่นค์ดีดผู้เล่นแปลกหน้าที่เข้าใกล้สวนของคุณ ขึ้นไปบนอวกาศ",
     Default = false,
     Callback = function(value)
         GardenProtectionActive = value
@@ -1380,7 +1330,7 @@ Tabs.AutoNormal:AddToggle("GardenProtectionToggle", {
             
             Fluent:Notify({
                 Title = "Garden Protection",
-                Content = "เปิดใช้งานระบบคุ้มกันสวนสำเร็จ! (กำลังเฝ้าพล็อต: " .. activePlotName .. ")",
+                Content = "เปิดระบบคุ้มกันสวนสำเร็จ! (กำลังเฝ้าพล็อต: " .. activePlotName .. ")",
                 Duration = 4
             })
         else
@@ -1402,7 +1352,6 @@ SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
 
 SaveManager:IgnoreThemeSettings()
-
 SaveManager:SetIgnoreIndexes({})
 
 InterfaceManager:SetFolder("FluentScriptHub")
@@ -1410,7 +1359,6 @@ SaveManager:SetFolder("FluentScriptHub/specific-game")
 
 InterfaceManager:BuildInterfaceSection(Tabs.Settings)
 SaveManager:BuildConfigSection(Tabs.Settings)
-
 
 Window:SelectTab(1)
 
