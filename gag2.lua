@@ -1199,7 +1199,7 @@ local function createLocalWalls()
                     wall.Size = wallData.Size
                     wall.CFrame = wallData.CFrame
                     wall.Anchored = true
-                    wall.Transparency = 1 -- ปรับค่าเป็น 1 เพื่อล่องหนโดยสมบูรณ์ ไม่มีใครมองเห็นกำแพงได้
+                    wall.Transparency = 1 
                     wall.Color = Color3.fromRGB(255, 30, 30)
                     wall.Material = Enum.Material.SmoothPlastic
                     wall.CanCollide = false
@@ -1280,10 +1280,10 @@ for _, animal in ipairs(AnimalOptions) do
     AnimalOptionsByLabel[label] = animal
 end
 
--- หมวดหมู่ใหม่ Garden Protection
-Tabs.AutoNormal:AddSection("Garden Protection")
+-- [จุดที่แก้ไข] สร้าง Section สำหรับ Garden Protection ให้ถูกตามระบบของ Fluent UI
+local ProtectionSection = Tabs.AutoNormal:AddSection({ Title = "Garden Protection" })
 
-Tabs.AutoNormal:AddToggle("CreateProtection", {
+ProtectionSection:AddToggle("CreateProtection", {
     Title = "Create Protection",
     Description = "สร้างการป้องกันสวน จากการขโมยผลไม้",
     Default = false,
@@ -1292,18 +1292,15 @@ Tabs.AutoNormal:AddToggle("CreateProtection", {
     end
 })
 
--- หมวดหมู่ Animals เดิม
-Tabs.AutoNormal:AddSection("Animals")
+-- [จุดที่แก้ไข] สร้าง Section สำหรับ Animals และย้าย Element เข้ามาผูกใน Section นี้ให้สมบูรณ์
+local AnimalsSection = Tabs.AutoNormal:AddSection({ Title = "Animals" })
 
-local NameAnimalsDropdown = Tabs.AutoNormal:AddDropdown("NameAnimals", {
+local NameAnimalsDropdown = AnimalsSection:AddDropdown("NameAnimals", {
     Title = "Name Animals",
     Values = AnimalOptionLabels,
     Multi = true,
-    Default = {}
-})
-
-if NameAnimalsDropdown and NameAnimalsDropdown.OnChanged then
-    NameAnimalsDropdown:OnChanged(function(value)
+    Default = {},
+    Callback = function(value)
         SelectedAnimals = {}
         for label, selected in pairs(value) do
             if selected then
@@ -1313,10 +1310,10 @@ if NameAnimalsDropdown and NameAnimalsDropdown.OnChanged then
                 end
             end
         end
-    end)
-end
+    end
+})
 
-AutoAnimalsToggle = Tabs.AutoNormal:AddToggle("AutoAnimals", {
+AutoAnimalsToggle = AnimalsSection:AddToggle("AutoAnimals", {
     Title = "Auto Animals",
     Description = "ต้องเลือก Name Animals และมีเงินเพียงพอ",
     Default = false,
