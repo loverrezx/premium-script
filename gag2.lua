@@ -296,9 +296,7 @@ local ThaiText = {
     ["Set as autoload"] = "ตั้งให้โหลดอัตโนมัติ",
     ["Ignore Theme Settings"] = "ไม่บันทึกค่าธีม",
     ["The script has been loaded."] = "โหลดสคริปต์เรียบร้อยแล้ว",
-    ["Notification"] = "แจ้งเตือน",
-    ["Create Protection"] = "สร้างการป้องกันสวน",
-    ["Garden Protection"] = "ระบบป้องกันสวน"
+    ["Notification"] = "แจ้งเตือน"
 }
 
 local function translateText(text)
@@ -747,7 +745,7 @@ local AnimalOptions = {
     { Name = "Frog", Price = 10000, Rank = "Common" },
     { Name = "Bunny", Price = 20000, Rank = "Common" },
     { Name = "Owl", Price = 25000, Rank = "Uncommon" },
-    { Name = "Deer", Price = 50000, Rare = "Rare" },
+    { Name = "Deer", Price = 50000, Rank = "Rare" },
     { Name = "Turtle", Price = 70000, Rank = "Rare" },
     { Name = "Robin", Price = 75000, Rank = "Legendary" },
     { Name = "Bee", Price = 1000000, Rank = "Legendary" },
@@ -796,6 +794,7 @@ pcall(function()
     VirtualInputManager = game:GetService("VirtualInputManager")
 end)
 
+-- ฟังก์ชันหา character และ HRP ของผู้เล่น
 local function getCharacterParts()
     local player = Players.LocalPlayer
     local char = player.Character or player.CharacterAdded:Wait()
@@ -804,6 +803,7 @@ local function getCharacterParts()
     return char, hrp, hum
 end
 
+-- ฟังก์ชัน warp กลับ SpawnPoint
 local function warpToSpawn()
     pcall(function()
         local spawnPoint = workspace:FindFirstChild("Gardens")
@@ -819,16 +819,21 @@ local function warpToSpawn()
     end)
 end
 
+-- ฟังก์ชันดึง WildPet ชื่อตรงกับที่เลือกทั้งหมด
 local function findTargetAnimals()
     local found = {}
 
+    -- หาใน workspace ทั้งหมด
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("Model") or obj:IsA("BasePart") then
             local name = obj.Name
+            -- รูปแบบ: WildPet_Owl_WildPet_747c46e3-...
+            -- ดึงชื่อหลัง _ ตัวแรก
             local extractedName = name:match("^WildPet_([^_]+)_")
             if extractedName and SelectedAnimals[extractedName:lower()] then
                 local animal = SelectedAnimals[extractedName:lower()]
                 if canAffordAnimal(animal) then
+                    -- ถ้าเป็น Model ให้หา PrimaryPart หรือ Part ใดๆ
                     if obj:IsA("Model") then
                         local part = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
                         if part then
@@ -845,6 +850,7 @@ local function findTargetAnimals()
     return found
 end
 
+-- ฟังก์ชัน smooth follow ไปหาสัตว์ (ลอยไปแบบเร็ว)
 local function smoothMoveTo(targetPart)
     local _, hrp, _ = getCharacterParts()
     if not hrp or not targetPart then return end
@@ -862,6 +868,7 @@ local function smoothMoveTo(targetPart)
 
         if dist < 5 then break end
 
+        -- ลอยไปด้วย lerp เร็ว
         local alpha = math.min(0.35, dist / 20)
         local newPos = currentPos:Lerp(targetPos, alpha)
         hrp.CFrame = CFrame.new(newPos, targetPos)
@@ -871,6 +878,8 @@ local function smoothMoveTo(targetPart)
     end
 end
 
+-- ฟังก์ชันหา ProximityPrompt (ปุ่ม E) ใกล้ผู้เล่น
+-- หาตำแหน่งของ object (BasePart หรือ Model)
 local function getObjectPosition(obj)
     if obj:IsA("BasePart") then
         return obj.Position
@@ -881,6 +890,7 @@ local function getObjectPosition(obj)
     return nil
 end
 
+-- หา interactable ทุกประเภทใกล้ผู้เล่น (ProximityPrompt, ClickDetector, BillboardGui Button, ScreenGui Button)
 local function findNearbyInteractable()
     local _, hrp, _ = getCharacterParts()
     if not hrp then return nil, nil end
@@ -889,6 +899,7 @@ local function findNearbyInteractable()
     local bestType = nil
     local bestDist = 25
 
+    -- 1) ProximityPrompt ใน workspace
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("ProximityPrompt") and obj.Enabled then
             local parent = obj.Parent
@@ -915,6 +926,7 @@ local function findNearbyInteractable()
         end
     end
 
+    -- 2) BillboardGui / SurfaceGui ที่มี TextButton/ImageButton ใน workspace
     if not bestObj then
         for _, gui in ipairs(workspace:GetDescendants()) do
             if (gui:IsA("BillboardGui") or gui:IsA("SurfaceGui")) then
@@ -923,6 +935,7 @@ local function findNearbyInteractable()
                 if pos then
                     local dist = (pos - hrp.Position).Magnitude
                     if dist < bestDist then
+                        -- หา button ลูกใน gui
                         for _, child in ipairs(gui:GetDescendants()) do
                             if (child:IsA("TextButton") or child:IsA("ImageButton")) and child.Visible then
                                 bestDist = dist
@@ -937,12 +950,14 @@ local function findNearbyInteractable()
         end
     end
 
+    -- 3) ScreenGui ที่ปรากฏอยู่ใน PlayerGui (เช่น popup กด E)
     if not bestObj then
         local playerGui = Players.LocalPlayer:FindFirstChild("PlayerGui")
         if playerGui then
             for _, gui in ipairs(playerGui:GetDescendants()) do
                 if (gui:IsA("TextButton") or gui:IsA("ImageButton")) and gui.Visible then
                     local text = tostring(gui.Text):upper()
+                    -- กรองเฉพาะ button ที่น่าจะเป็น interact (มีข้อความสั้นๆ หรือว่างเปล่า)
                     if text == "E" or text == "" or text:find("HOLD") or text:find("PRESS") or text:find("COLLECT") or text:find("CATCH") then
                         bestObj = gui
                         bestType = "ScreenButton"
@@ -956,19 +971,22 @@ local function findNearbyInteractable()
     return bestObj, bestType
 end
 
+-- กด/ค้าง interactable จนกว่าจะหายไป
 local function holdInteractableUntilGone(obj, objType)
     if not obj then return end
 
     local holdStart = os.clock()
-    local maxHold = 10
+    local maxHold = 10 -- timeout สูงสุด 10 วิ
 
     if objType == "ProximityPrompt" then
         local holdDuration = (obj.HoldDuration or 0)
 
+        -- วิธีที่ 1: fireproximityprompt (ทำงานได้บน executor ส่วนใหญ่)
         local usedFire = false
         pcall(function()
             if fireproximityprompt then
                 if holdDuration > 0 then
+                    -- ต้อง fire ค้างไว้ตาม duration
                     local fireStart = os.clock()
                     while AutoAnimalsActive and obj and obj.Parent do
                         fireproximityprompt(obj)
@@ -982,6 +1000,7 @@ local function holdInteractableUntilGone(obj, objType)
             end
         end)
 
+        -- วิธีที่ 2: VirtualInputManager กด E ค้าง
         if not usedFire then
             pcall(function()
                 if VirtualInputManager then
@@ -993,6 +1012,7 @@ local function holdInteractableUntilGone(obj, objType)
             end)
         end
 
+        -- วิธีที่ 3: Keypress ผ่าน UserInputService simulate
         if not usedFire then
             pcall(function()
                 local inputObject = {
@@ -1007,6 +1027,7 @@ local function holdInteractableUntilGone(obj, objType)
             end)
         end
 
+        -- รอจน prompt หายไป (timeout 8 วิ)
         local waited = 0
         while obj and obj.Parent and waited < 80 and AutoAnimalsActive do
             task.wait(0.1)
@@ -1014,6 +1035,7 @@ local function holdInteractableUntilGone(obj, objType)
         end
 
     elseif objType == "ClickDetector" then
+        -- ใช้ fireclickdetector
         local fired = false
         pcall(function()
             if fireclickdetector then
@@ -1027,6 +1049,7 @@ local function holdInteractableUntilGone(obj, objType)
             end)
         end
 
+        -- ค้างไว้จนหาย timeout 8 วิ
         local waited = 0
         while obj and obj.Parent and waited < 80 and AutoAnimalsActive do
             task.wait(0.1)
@@ -1034,17 +1057,21 @@ local function holdInteractableUntilGone(obj, objType)
         end
 
     elseif objType == "GuiButton" or objType == "ScreenButton" then
+        -- คลิก GUI Button ค้างจนหาย
         local function clickButton()
             pcall(function()
+                -- วิธีที่ 1: fire MouseButton1Click โดยตรง
                 obj.MouseButton1Click:Fire()
             end)
             pcall(function()
+                -- วิธีที่ 2: fire MouseButton1Down + Up
                 obj.MouseButton1Down:Fire(0, 0)
                 task.wait(0.05)
                 obj.MouseButton1Up:Fire(0, 0)
             end)
         end
 
+        -- คลิกค้างจนกว่า button จะหายไป
         while obj and obj.Parent and obj.Visible and AutoAnimalsActive do
             if os.clock() - holdStart >= maxHold then break end
             clickButton()
@@ -1053,8 +1080,10 @@ local function holdInteractableUntilGone(obj, objType)
     end
 end
 
+-- Loop หลักของ Auto Animals
 local function runAutoAnimalsLoop()
     while AutoAnimalsActive do
+        -- ตรวจสอบว่ายังมีสัตว์ที่เลือกอยู่หรือไม่
         local hasSelected = false
         for _, _ in pairs(SelectedAnimals) do
             hasSelected = true
@@ -1070,20 +1099,25 @@ local function runAutoAnimalsLoop()
             break
         end
 
+        -- หาสัตว์ใน workspace
         local targets = findTargetAnimals()
 
         if #targets > 0 then
             local target = targets[1]
             local targetPart = target.part
 
+            -- ติดตามสัตว์แบบ smooth
             if targetPart and targetPart.Parent then
+                -- เดินไปหาสัตว์
                 smoothMoveTo(targetPart)
 
+                -- เมื่อถึงที่แล้ว หา interactable (ProximityPrompt / ClickDetector / GuiButton)
                 if AutoAnimalsActive then
                     local interactable, interactType = findNearbyInteractable()
                     if interactable then
                         holdInteractableUntilGone(interactable, interactType)
                     else
+                        -- ลองรอสักครู่แล้วหาใหม่ (บางครั้ง prompt โหลดช้า)
                         task.wait(0.5)
                         interactable, interactType = findNearbyInteractable()
                         if interactable then
@@ -1092,12 +1126,14 @@ local function runAutoAnimalsLoop()
                     end
                 end
 
+                -- warp กลับ SpawnPoint หลังจากเก็บสัตว์
                 if AutoAnimalsActive then
                     warpToSpawn()
                     task.wait(1)
                 end
             end
         else
+            -- ไม่พบสัตว์ รอแล้วลองใหม่
             task.wait(1)
         end
 
@@ -1137,6 +1173,7 @@ local function setAutoAnimalsEnabled(enabled)
         Duration = 4
     })
 
+    -- รัน loop ใน thread แยก
     if AutoAnimalsThread then
         task.cancel(AutoAnimalsThread)
     end
@@ -1190,163 +1227,135 @@ AutoAnimalsToggle = Tabs.AutoNormal:AddToggle("AutoAnimals", {
     end
 })
 
--- ========== GARDEN PROTECTION SYSTEM (ADDED) ==========
+-- ========== GARDEN PROTECTION SYSTEM ==========
 
 local ProtectionActive = false
-local ProtectionWalls = {}
-local ProtectionLoopThread = nil
-local ProtectionFolder = nil
+local BuiltWalls = {}
+local ProtectionConnection = nil
 
-local function removeGardenProtection()
-    ProtectionActive = false
-    if ProtectionLoopThread then
-        task.cancel(ProtectionLoopThread)
-        ProtectionLoopThread = nil
+local function ClearProtectionWalls()
+    if ProtectionConnection then
+        ProtectionConnection:Disconnect()
+        ProtectionConnection = nil
     end
-    if ProtectionFolder then
-        ProtectionFolder:Destroy()
-        ProtectionFolder = nil
+    for _, wall in ipairs(BuiltWalls) do
+        if wall and wall.Parent then
+            pcall(function() wall:Destroy() end)
+        end
     end
-    ProtectionWalls = {}
+    BuiltWalls = {}
 end
 
-local function generateProtectionWalls()
-    if not ProtectionActive then return end
-    if ProtectionFolder then ProtectionFolder:Destroy() end
-    ProtectionWalls = {}
+local function BuildGardenProtection()
+    ClearProtectionWalls()
+    
+    local gardensFolder = workspace:FindFirstChild("Gardens")
+    if not gardensFolder then return end
 
-    ProtectionFolder = Instance.new("Folder")
-    ProtectionFolder.Name = "Thanathip_GardenProtection"
-    ProtectionFolder.Parent = workspace
-
-    local gardens = workspace:FindFirstChild("Gardens")
-    if not gardens then return end
-
-    -- ค้นหาแปลงสวนทั้งหมดที่มีอยู่เพื่อสร้างกำแพงล้อมรอบแบบ Invisible
-    for _, plot in ipairs(gardens:GetChildren()) do
-        if plot:IsA("Model") then
-            -- ใช้ขอบเขตขนาดของแปลงหรือสร้างกำแพง 4 ทิศรอบๆ จุดศูนย์กลาง
-            local primary = plot.PrimaryPart or plot:FindFirstChild("SpawnPoint") or plot:FindFirstChildWhichIsA("BasePart", true)
-            if primary then
-                local plotPos = primary.Position
-                -- กำหนดขนาดความกว้างยาวเฉลี่ยของสวน และความสูงของกำแพงตามเงื่อนไข (กำแพงสูงมาก)
-                local sizeX, sizeZ, wallHeight = 120, 120, 150 
-                local wallThickness = 2
-
-                local wallConfigs = {
-                    {Size = Vector3.new(sizeX, wallHeight, wallThickness), Offset = Vector3.new(0, wallHeight/2, sizeZ/2)},
-                    {Size = Vector3.new(sizeX, wallHeight, wallThickness), Offset = Vector3.new(0, wallHeight/2, -sizeZ/2)},
-                    {Size = Vector3.new(wallThickness, wallHeight, sizeZ), Offset = Vector3.new(sizeX/2, wallHeight/2, 0)},
-                    {Size = Vector3.new(wallThickness, wallHeight, sizeZ), Offset = Vector3.new(-sizeX/2, wallHeight/2, 0)}
-                }
-
-                for _, config in ipairs(wallConfigs) do
-                    local wall = Instance.new("Part")
-                    wall.Name = "ProtectionWall"
-                    wall.Size = config.Size
-                    wall.Position = plotPos + config.Offset
-                    wall.Anchored = true
-                    wall.Transparency = 1 -- กำแพงล่องหน มองไม่เห็น
-                    wall.Material = Enum.Material.ForceField
-                    wall.CanCollide = true
-                    wall.Parent = ProtectionFolder
-                    table.insert(ProtectionWalls, wall)
-
-                    -- ระบบทำลายผู้เล่นอื่นทันที (ตายอัตโนมัติ) หากสัมผัสโดนกำแพงตัวนี้
-                    wall.Touched:Connect(function(hit)
-                        if not ProtectionActive then return end
-                        local model = hit.Parent
-                        if model and model:IsA("Model") and model:FindFirstChildOfClass("Humanoid") then
-                            local hitPlayer = Players:GetPlayerFromCharacter(model)
-                            if hitPlayer and hitPlayer ~= Players.LocalPlayer then
-                                pcall(function()
-                                    model:FindFirstChildOfClass("Humanoid").Health = 0
-                                end)
-                            end
+    -- ค้นหา BedSection ทั้งหมดในโฟลเดอร์ Gardens (ตามโครงสร้างรูปภาพ)
+    for _, plot in ipairs(gardensFolder:GetChildren()) do
+        local visualFolder = plot:FindFirstChild("Visual")
+        if visualFolder then
+            for _, child in ipairs(visualFolder:GetChildren()) do
+                if child.Name == "BedSection" and (child:IsA("BasePart") or child:IsA("Model")) then
+                    pcall(function()
+                        local targetPart = child:IsA("Model") and (child.PrimaryPart or child:FindFirstChildWhichIsA("BasePart")) or child
+                        if targetPart then
+                            -- สร้างกำแพงล่องหนครอบตำแหน่งแปลงผัก
+                            local wall = Instance.new("Part")
+                            wall.Name = "JopagenProtectionWall"
+                            wall.Size = targetPart.Size + Vector3.new(1, 100, 1) -- กำแพงสูง 100 หน่วยป้องกันการกระโดดข้าม
+                            wall.CFrame = targetPart.CFrame + Vector3.new(0, 50, 0) -- ย้ายจุดศูนย์กลางขึ้นด้านบน
+                            wall.Transparency = 1 -- ล่องหนมองไม่เห็น
+                            wall.Anchored = true
+                            wall.CanCollide = false -- เริ่มต้นด้วย false แล้วใช้ RenderStepped คุมแบบ Realtime
+                            wall.Parent = workspace
+                            
+                            table.insert(BuiltWalls, wall)
                         end
-                    end)
+                     pcall)
                 end
             end
         end
     end
-end
 
-local function runProtectionLoop()
-    while ProtectionActive do
-        local char, hrp, hum = getCharacterParts()
+    -- ใช้ RenderStepped ในการเช็คระยะและควบคุม CanCollide แยกรายบุคคลแบบเรียลไทม์
+    ProtectionConnection = RunService.RenderStepped:Connect(function()
+        if not ProtectionActive then return end
         
-        -- ตรวจสอบและจัดการสถานะการชน (CanCollide) บนเครื่อง Local ของเราแบบ Real-time
-        if char then
-            for _, wall in ipairs(ProtectionWalls) do
-                if wall and wall.Parent then
-                    -- สำหรับผู้ใช้งาน Script: ตัวเราเองจะทะลุกำแพงได้ตลอดเวลาแบบไม่มีเงื่อนไข
-                    wall.CanCollide = false
+        local lPlayer = Players.LocalPlayer
+        local lChar = lPlayer.Character
+        local lHrp = lChar and lChar:FindFirstChild("HumanoidRootPart")
+        
+        for _, wall in ipairs(BuiltWalls) do
+            if wall and wall.Parent then
+                if lHrp then
+                    local distance = (lHrp.Position - wall.Position).Magnitude
+                    -- ถ้าตัวเรา (คนใช้สคริปต์) อยู่ใกล้กำแพง ให้ปิด CanCollide เพื่อให้เราเดินทะลุได้
+                    if distance < 30 then
+                        wall.CanCollide = false
+                    else
+                        -- ถ้าอยู่ห่างออกไป ให้เปิด CanCollide เสมอเพื่อกันผู้เล่นคนอื่นเข้ามา
+                        wall.CanCollide = true
+                    end
+                else
+                    wall.CanCollide = true
                 end
-            end
-        end
-
-        -- จัดการผู้เล่นคนอื่นๆ ที่แอบวาร์ปหรือใช้สปีดบินข้ามเข้ามาด้านในพื้นที่สวน
-        local gardens = workspace:FindFirstChild("Gardens")
-        if gardens then
-            for _, otherPlayer in ipairs(Players:GetPlayers()) do
-                if otherPlayer ~= Players.LocalPlayer and otherPlayer.Character and otherPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    local otherHrp = otherPlayer.Character.HumanoidRootPart
-                    local otherHum = otherPlayer.Character:FindFirstChildOfClass("Humanoid")
-                    
-                    if otherHum and otherHum.Health > 0 then
-                        for _, plot in ipairs(gardens:GetChildren()) do
-                            if plot:IsA("Model") then
-                                local primary = plot.PrimaryPart or plot:FindFirstChild("SpawnPoint") or plot:FindFirstChildWhichIsA("BasePart", true)
-                                if primary then
-                                    local distance = (otherHrp.Position - primary.Position).Magnitude
-                                    -- หากมีใครอยู่ในรัศมีของสวนตัวเรา จะทำการ Kill ทันที
-                                    if distance < 58 then 
-                                        pcall(function()
-                                            otherHum.Health = 0
-                                        end)
-                                    end
-                                end
+                
+                -- ตรวจสอบคิลผู้เล่นอื่นที่พยายามแฮกผ่านเข้ามาในระยะแปลงผัก
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if player ~= lPlayer then
+                        local char = player.Character
+                        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                        local hum = char and char:FindFirstChild("Humanoid")
+                        
+                        if hrp and hum and hum.Health > 0 then
+                            local wallPosXZ = Vector3.new(wall.Position.X, 0, wall.Position.Z)
+                            local hrpPosXZ = Vector3.new(hrp.Position.X, 0, hrp.Position.Z)
+                            local distXZ = (hrpPosXZ - wallPosXZ).Magnitude
+                            
+                            -- ตรวจสอบขอบเขตความกว้างและความสูงของกำแพงป้องกัน
+                            if distXZ < (wall.Size.X / 2) and math.abs(hrp.Position.Y - wall.Position.Y) < (wall.Size.Y / 2) then
+                                pcall(function()
+                                    hum.Health = 0 -- ตายอัตโนมัติทันที
+                                end)
                             end
                         end
                     end
                 end
+                
             end
         end
-        task.wait(0.1)
-    end
+    end)
 end
 
 Tabs.AutoNormal:AddSection("Garden Protection")
 
 Tabs.AutoNormal:AddToggle("CreateProtection", {
     Title = "Create Protection",
-    Description = "สร้างกำแพงล่องหนป้องกันการขโมย (ผู้เล่นอื่นผ่านจะตาย)",
+    Description = "สร้างการป้องกันสวน จากการขโมยผลไม้ (กำแพงล่องหน)",
     Default = false,
     Callback = function(value)
+        ProtectionActive = value
         if value then
-            ProtectionActive = true
-            generateProtectionWalls()
-            
-            if ProtectionLoopThread then task.cancel(ProtectionLoopThread) end
-            ProtectionLoopThread = task.spawn(runProtectionLoop)
-            
+            BuildGardenProtection()
             Fluent:Notify({
                 Title = "Garden Protection",
-                Content = "เปิดการป้องกันสวนเรียบร้อยแล้ว กำแพงล่องหนทำงาน!",
+                Content = "เปิดระบบป้องกันสวนเรียบร้อยแล้ว",
                 Duration = 4
             })
         else
-            removeGardenProtection()
+            ClearProtectionWalls()
             Fluent:Notify({
                 Title = "Garden Protection",
-                Content = "ปิดการทำงาน ปรับทุกอย่างเป็นปกติแล้ว",
+                Content = "ปิดระบบป้องกันสวน ทุกอย่างกลับสู่ปกติ",
                 Duration = 4
             })
         end
     end
 })
 
--- =======================================================
+-- =============================================
 
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
