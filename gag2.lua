@@ -803,12 +803,64 @@ local function getCharacterParts()
     return char, hrp, hum
 end
 
--- ฟังก์ชัน warp กลับ SpawnPoint
+-- [เพิ่มฟังก์ชันพิเศษ] ระบบตรวจหา Plot ของผู้เล่นปัจจุบันโดยอัตโนมัติ (Plot1 - Plot8)
+local function getMyPlot()
+    local gardens = workspace:FindFirstChild("Gardens")
+    if not gardens then return nil end
+
+    -- วิธีที่ 1: ตรวจจาก RespawnLocation ของระบบ Roblox (ตรงและแม่นยำที่สุด)
+    local respawnLoc = Players.LocalPlayer.RespawnLocation
+    if respawnLoc and respawnLoc:IsDescendantOf(gardens) then
+        local p = respawnLoc.Parent
+        if p and p.Name:match("^Plot%d+$") then
+            return p
+        end
+    end
+
+    -- วิธีที่ 2: สแกนหาค่า Owner หรือชื่อผู้เล่นที่ถูกบันทึกไว้ในแปลงผัก (เผื่อตัวเกมเซ็ตไว้)
+    for i = 1, 8 do
+        local plot = gardens:FindFirstChild("Plot" .. i)
+        if plot then
+            local owner = plot:FindFirstChild("Owner") or plot:FindFirstChild("Player")
+                or (plot:FindFirstChild("SpawnPoint") and (plot.SpawnPoint:FindFirstChild("Owner") or plot.SpawnPoint:FindFirstChild("Player")))
+            
+            if owner and (owner.Value == Players.LocalPlayer or owner.Value == Players.LocalPlayer.Name) then
+                return plot
+            end
+        end
+    end
+
+    -- วิธีที่ 3: เช็คหาระยะพล็อตที่อยู่ใกล้เคียงตัวละครที่สุด ณ ตอนนั้น (ความแม่นยำสูงเมื่อเพิ่งสปอว์น)
+    local char = Players.LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        local closestPlot = nil
+        local minDist = math.huge
+        for i = 1, 8 do
+            local plot = gardens:FindFirstChild("Plot" .. i)
+            local spawnPoint = plot and plot:FindFirstChild("SpawnPoint")
+            if spawnPoint and spawnPoint:IsA("BasePart") then
+                local dist = (hrp.Position - spawnPoint.Position).Magnitude
+                if dist < minDist then
+                    minDist = dist
+                    closestPlot = plot
+                end
+            end
+        end
+        if closestPlot and minDist < 60 then
+            return closestPlot
+        end
+    end
+
+    -- ค่าเริ่มต้นหากไม่พบเงื่อนไขใดๆ เลยเพื่อป้องกันบั๊ก
+    return gardens:FindFirstChild("Plot1")
+end
+
+-- ฟังก์ชัน warp กลับ SpawnPoint (อัปเดตให้รองรับ Plot ไดนามิกอัตโนมัติ)
 local function warpToSpawn()
     pcall(function()
-        local spawnPoint = workspace:FindFirstChild("Gardens")
-            and workspace.Gardens:FindFirstChild("Plot1")
-            and workspace.Gardens.Plot1:FindFirstChild("SpawnPoint")
+        local myPlot = getMyPlot()
+        local spawnPoint = myPlot and myPlot:FindFirstChild("SpawnPoint")
 
         if spawnPoint then
             local _, hrp, _ = getCharacterParts()
@@ -1228,6 +1280,123 @@ AutoAnimalsToggle = Tabs.AutoNormal:AddToggle("AutoAnimals", {
 })
 
 Tabs.AutoNormal:AddSection("Garden Protection")
+
+-- ==================== [ระบบ GARDEN PROTECTION - เวอร์ชันรองรับหลายพล็อต] ====================
+local GardenProtectionActive = false
+local GardenProtectionThread = nil
+local WhitelistedPlayers = {}
+
+-- แถบเลือก User ที่อนุญาต (Whitelist)
+local WhitelistDropdown = Tabs.AutoNormal:AddDropdown("GardenWhitelist", {
+    Title = "Whitelist Players",
+    Description = "เลือกผู้เล่นที่จะอนุญาตให้เข้าสวนของเราได้",
+    Values = {},
+    Multi = true,
+    Default = {}
+})
+
+-- ฟังก์ชันดึงและอัปเดตรายชื่อผู้เล่นแบบ Real-time
+local function updatePlayerDropdown()
+    local list = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= Players.LocalPlayer then
+            table.insert(list, p.Name)
+        end
+    end
+    WhitelistDropdown:SetValues(list)
+end
+
+-- ผูกการทำงานเชื่อมต่อตรวจคนเข้า/ออกจากเซิร์ฟเวอร์
+table.insert(RuntimeConnections, Players.PlayerAdded:Connect(updatePlayerDropdown))
+table.insert(RuntimeConnections, Players.PlayerRemoving:Connect(updatePlayerDropdown))
+updatePlayerDropdown()
+
+-- บันทึกค่าผู้เล่นที่ถูกเลือกใน Whitelist
+WhitelistDropdown:OnChanged(function(value)
+    WhitelistedPlayers = {}
+    for name, enabled in pairs(value) do
+        if enabled then
+            WhitelistedPlayers[name] = true
+        end
+    end
+end)
+
+-- ฟังก์ชันตรวจสอบและกำจัดคนแปลกหน้าที่เหยียบแปลงผัก (ตรวจสอบเจาะจงที่พล็อตตัวเองเท่านั้น)
+local function runGardenProtectionLoop()
+    while GardenProtectionActive do
+        pcall(function()
+            -- หาพล็อตของตัวเองแบบไดนามิก (Plot1 - Plot8)
+            local myPlot = getMyPlot()
+            local visualFolder = myPlot and myPlot:FindFirstChild("Visual")
+            
+            if visualFolder then
+                local partsToCheck = {}
+                for _, obj in ipairs(visualFolder:GetDescendants()) do
+                    if obj:IsA("BasePart") then
+                        table.insert(partsToCheck, obj)
+                    end
+                end
+                
+                if #partsToCheck > 0 then
+                    for _, player in ipairs(Players:GetPlayers()) do
+                        -- ต้องไม่ใช่เราเอง และต้องไม่อยู่ในรายชื่อ Whitelist
+                        if player ~= Players.LocalPlayer and not WhitelistedPlayers[player.Name] then
+                            local char = player.Character
+                            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                            local hum = char and char:FindFirstChild("Humanoid")
+                            
+                            if hrp and hum and hum.Health > 0 then
+                                for _, part in ipairs(partsToCheck) do
+                                    local distance = (hrp.Position - part.Position).Magnitude
+                                    -- ระยะเซนเซอร์เซฟตี้ 12 Studs รอบแปลงดิน
+                                    if distance < 12 then
+                                        hum.Health = 0 -- สั่งตายทันที
+                                        break
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+        task.wait(0.1) -- เช็ควนลูปอย่างรวดเร็วทุกๆ 0.1 วินาที
+    end
+end
+
+-- ปุ่ม Toggle สำหรับเปิด-ปิด ระบบ Garden Protection
+Tabs.AutoNormal:AddToggle("GardenProtectionToggle", {
+    Title = "Garden Protection",
+    Description = "ฟังชั่นค์การป้องกันผู้เล่น เข้าสวนเพื่อขโมยผลไม้",
+    Default = false,
+    Callback = function(value)
+        GardenProtectionActive = value
+        if value then
+            if GardenProtectionThread then task.cancel(GardenProtectionThread) end
+            GardenProtectionThread = task.spawn(runGardenProtectionLoop)
+            
+            local activePlotName = "ไม่ระบุ"
+            pcall(function() activePlotName = getMyPlot().Name end)
+            
+            Fluent:Notify({
+                Title = "Garden Protection",
+                Content = "เปิดใช้งานระบบคุ้มกันสวนสำเร็จ! (กำลังเฝ้าพล็อต: " .. activePlotName .. ")",
+                Duration = 4
+            })
+        else
+            if GardenProtectionThread then 
+                task.cancel(GardenProtectionThread) 
+                GardenProtectionThread = nil
+            end
+            Fluent:Notify({
+                Title = "Garden Protection",
+                Content = "ปิดระบบคุ้มกันสวนผักเรียบร้อยแล้ว",
+                Duration = 4
+            })
+        end
+    end
+})
+-- ============================================================================
 
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
