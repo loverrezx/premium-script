@@ -1237,10 +1237,11 @@ AutoAnimalsToggle = Tabs.AutoNormal:AddToggle("AutoAnimals", {
 
 Tabs.AutoNormal:AddSection("Garden Protection")
 
--- ==================== [ระบบ GARDEN PROTECTION - เวอร์ชันดีดฟิสิกส์หลบต้านวาร์ป] ====================
+-- ==================== [ระบบ GARDEN PROTECTION - เวอร์ชันกับดักหลุมดำทะลุใต้แมพ] ====================
 local GardenProtectionActive = false
 local GardenProtectionThread = nil
 local WhitelistedPlayers = {}
+local affectedCharacters = {} -- ตารางบันทึกรายชื่อตัวละครที่เคยตกแมพไปแล้วในชีวิตปัจจุบัน
 
 local WhitelistDropdown = Tabs.AutoNormal:AddDropdown("GardenWhitelist", {
     Title = "Whitelist Players",
@@ -1273,42 +1274,27 @@ WhitelistDropdown:OnChanged(function(value)
     end
 end)
 
--- ฟังก์ชันดีดฟิสิกส์ (หลบระบบต้านวาร์ป)
-local function physicsFling(targetChar)
-    local lpChar, lpHrp, lpHum = getCharacterParts()
+-- ฟังก์ชันทำให้ร่วงทะลุแมพ (ตกครั้งเดียว รีตัวแล้วหาย)
+local function makePlayerFallThroughMap(targetChar)
+    if affectedCharacters[targetChar] then return end -- ป้องกันการซ้ำซ้อนถ้าเคยโดนแล้ว
+    affectedCharacters[targetChar] = true -- ล็อคเป้าหมายไว้ทันทีว่าโดนแล้วในชีวิตนี้
+    
     local targetHrp = targetChar:FindFirstChild("HumanoidRootPart")
-    if not lpHrp or not targetHrp then return end
+    local targetHum = targetChar:FindFirstChildOfClass("Humanoid")
+    if not targetHrp or not targetHum then return end
     
-    local savedCFrame = lpHrp.CFrame
-    
-    -- ป้องกันตัวเราล้มลุกคลุกคลานระหว่างชน
-    local oldState = lpHum:GetState()
-    lpHum:ChangeState(Enum.HumanoidStateType.Physics)
-    
-    -- สร้างแรงหมุนเชิงฟิสิกส์มหาศาลที่ตัวเรา (ขุนค้อนชนแหลก)
-    local fav = Instance.new("BodyAngularVelocity")
-    fav.MaxTorque = Vector3.new(1, 1, 1) * math.huge
-    fav.AngularVelocity = Vector3.new(0, 999999, 0)
-    fav.Parent = lpHrp
-    
-    -- อัดความเร็วเสริมแรงปะทะ
-    lpHrp.AssemblyLinearVelocity = Vector3.new(99999, 99999, 99999)
-    
-    -- สไลด์ตัวเราเข้าไปสับเปลี่ยนตำแหน่งชน 5 เฟรมแบบรวดเร็ว (ระยะใกล้ 12 studs ระบบไม่เตะ)
-    for i = 1, 5 do
-        if not targetHrp or not targetHrp.Parent or not lpHrp or not lpHrp.Parent then break end
-        lpHrp.CFrame = targetHrp.CFrame * CFrame.new(math.random(-1, 1)/10, 0, math.random(-1, 1)/10)
-        task.wait(0.01)
+    -- 1. สั่งเปิดโหมดไร้แรงต้านทานการชน (ทะลุวัตถุ) ของทุกชิ้นส่วนในตัวละคร
+    for _, part in ipairs(targetChar:GetChildren()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = false
+        end
     end
     
-    -- เคลียร์แรงฟิสิกส์ออก
-    fav:Destroy()
-    lpHrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-    lpHrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-    lpHum:ChangeState(oldState)
+    -- 2. เปลี่ยนสถานะให้เป็นท่วงท่าร่วงหล่น เพื่อไม่ให้ระบบอนิเมชั่นพยายามดึงตัวยืนบนพื้น
+    targetHum:ChangeState(Enum.HumanoidStateType.FallingDown)
     
-    -- ย้ายตัวเรากลับมาสแตนบายที่จุดเดิมในสวนผักของเราทันที
-    lpHrp.CFrame = savedCFrame
+    -- 3. ผลักตำแหน่งแกน Y ลงใต้พื้นดินทันที 4 บล็อก เพื่อหลุดจากความหนาของแผ่นพล็อตผัก
+    targetHrp.Position = targetHrp.Position - Vector3.new(0, 4, 0)
 end
 
 local function runGardenProtectionLoop()
@@ -1331,14 +1317,15 @@ local function runGardenProtectionLoop()
                             local char = player.Character
                             local hrp = char and char:FindFirstChild("HumanoidRootPart")
                             
-                            if hrp then
+                            -- ตรวจเช็คว่า ตัวละครนี้ยังไม่เคยโดนเปิดโหมดร่วงหล่นมาก่อนในชีวิตนี้
+                            if hrp and not affectedCharacters[char] then
                                 for _, part in ipairs(partsToCheck) do
                                     local distance = (hrp.Position - part.Position).Magnitude
-                                    -- เมื่อศัตรูเข้ามาในระยะป่วน 12 Studs
+                                    -- เมื่อศัตรูเข้ามาใกล้ในระยะ 12 Studs
                                     if distance < 12 then
-                                        -- เรียกใช้มวยปล้ำฟิสิกส์ ชนกระแทกให้กระเด็นออกไปแทนการวาร์ปตรงๆ
-                                        physicsFling(char)
-                                        task.wait(0.5) -- หน่วงเวลาป้องกันสแปมถี่เกินไป
+                                        -- เรียกฟังก์ชันเปิด Void Trap ทะลุลงใต้โลก
+                                        makePlayerFallThroughMap(char)
+                                        task.wait(0.1)
                                         break
                                     end
                                 end
@@ -1354,7 +1341,7 @@ end
 
 Tabs.AutoNormal:AddToggle("GardenProtectionToggle", {
     Title = "Garden Protection",
-    Description = "ฟังก์ชันดีดฟิสิกส์ผู้เล่นแปลกหน้าที่เข้าใกล้สวนของคุณ (ทะลุระบบกันวาร์ป)",
+    Description = "ฟังก์ชันปรับให้ผู้เล่นแปลกหน้าที่เข้าใกล้สวนร่วงทะลุลงใต้แมพ (โดนชีวิตละครั้ง)",
     Default = false,
     Callback = function(value)
         GardenProtectionActive = value
@@ -1367,7 +1354,7 @@ Tabs.AutoNormal:AddToggle("GardenProtectionToggle", {
             
             Fluent:Notify({
                 Title = "Garden Protection",
-                Content = "เปิดระบบมวยปล้ำฟิสิกส์คุ้มกันสวนผัก! (พล็อต: " .. activePlotName .. ")",
+                Content = "เปิดระบบกับดักหลุมดำทะลุแมพ! (พล็อต: " .. activePlotName .. ")",
                 Duration = 4
             })
         else
@@ -1375,6 +1362,7 @@ Tabs.AutoNormal:AddToggle("GardenProtectionToggle", {
                 task.cancel(GardenProtectionThread) 
                 GardenProtectionThread = nil
             end
+            affectedCharacters = {} -- เคลียร์ตารางบันทึกเมื่อปิดการทำงาน
             Fluent:Notify({
                 Title = "Garden Protection",
                 Content = "ปิดระบบคุ้มกันสวนผักเรียบร้อยแล้ว",
