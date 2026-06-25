@@ -1280,10 +1280,10 @@ for _, animal in ipairs(AnimalOptions) do
     AnimalOptionsByLabel[label] = animal
 end
 
--- [จุดที่แก้ไข] สร้าง Section สำหรับ Garden Protection ให้ถูกตามระบบของ Fluent UI
-local ProtectionSection = Tabs.AutoNormal:AddSection({ Title = "Garden Protection" })
+-- [จุดที่แก้ไขโครงสร้างแบบสมบูรณ์] เรียกใช้ฟังก์ชันผ่านตัวแปร Tab (Tabs.AutoNormal) โดยตรงทั้งหมด เพื่อป้องกันการ Error
+Tabs.AutoNormal:AddSection({ Title = "Garden Protection" })
 
-ProtectionSection:AddToggle("CreateProtection", {
+Tabs.AutoNormal:AddToggle("CreateProtection", {
     Title = "Create Protection",
     Description = "สร้างการป้องกันสวน จากการขโมยผลไม้",
     Default = false,
@@ -1292,28 +1292,28 @@ ProtectionSection:AddToggle("CreateProtection", {
     end
 })
 
--- [จุดที่แก้ไข] สร้าง Section สำหรับ Animals และย้าย Element เข้ามาผูกใน Section นี้ให้สมบูรณ์
-local AnimalsSection = Tabs.AutoNormal:AddSection({ Title = "Animals" })
+Tabs.AutoNormal:AddSection({ Title = "Animals" })
 
-local NameAnimalsDropdown = AnimalsSection:AddDropdown("NameAnimals", {
+local NameAnimalsDropdown = Tabs.AutoNormal:AddDropdown("NameAnimals", {
     Title = "Name Animals",
     Values = AnimalOptionLabels,
     Multi = true,
-    Default = {},
-    Callback = function(value)
-        SelectedAnimals = {}
-        for label, selected in pairs(value) do
-            if selected then
-                local animal = AnimalOptionsByLabel[label]
-                if animal then
-                    table.insert(SelectedAnimals, animal)
-                end
+    Default = {}
+})
+
+NameAnimalsDropdown:OnChanged(function(value)
+    SelectedAnimals = {}
+    for label, selected in pairs(value) do
+        if selected then
+            local animal = AnimalOptionsByLabel[label]
+            if animal then
+                table.insert(SelectedAnimals, animal)
             end
         end
     end
-})
+end)
 
-AutoAnimalsToggle = AnimalsSection:AddToggle("AutoAnimals", {
+AutoAnimalsToggle = Tabs.AutoNormal:AddToggle("AutoAnimals", {
     Title = "Auto Animals",
     Description = "ต้องเลือก Name Animals และมีเงินเพียงพอ",
     Default = false,
