@@ -1237,11 +1237,11 @@ AutoAnimalsToggle = Tabs.AutoNormal:AddToggle("AutoAnimals", {
 
 Tabs.AutoNormal:AddSection("Garden Protection")
 
--- ==================== [ระบบ GARDEN PROTECTION - เวอร์ชันกำแพงล่องหน 100 เมตร บล็อกคนนอก] ====================
+-- ==================== [ระบบ GARDEN PROTECTION - เวอร์ชันกับดักหลุมดำทะลุใต้แมพ] ====================
 local GardenProtectionActive = false
 local GardenProtectionThread = nil
 local WhitelistedPlayers = {}
-local WallFolder = nil
+local affectedCharacters = {} -- ตารางบันทึกรายชื่อตัวละครที่เคยตกแมพไปแล้วในชีวิตปัจจุบัน
 
 local WhitelistDropdown = Tabs.AutoNormal:AddDropdown("GardenWhitelist", {
     Title = "Whitelist Players",
@@ -1274,104 +1274,77 @@ WhitelistDropdown:OnChanged(function(value)
     end
 end)
 
--- ฟังก์ชันเคลียร์และสร้างกำแพงล่องหนขึ้นมาในเครื่องของเรา
-local function updateInvisibleWalls()
-    if not WallFolder then
-        WallFolder = Instance.new("Folder")
-        WallFolder.Name = "GardenInvisibleWalls"
-        WallFolder.Parent = workspace
+-- ฟังก์ชันทำให้ร่วงทะลุแมพ (ตกครั้งเดียว รีตัวแล้วหาย)
+local function makePlayerFallThroughMap(targetChar)
+    if affectedCharacters[targetChar] then return end -- ป้องกันการซ้ำซ้อนถ้าเคยโดนแล้ว
+    affectedCharacters[targetChar] = true -- ล็อคเป้าหมายไว้ทันทีว่าโดนแล้วในชีวิตนี้
+    
+    local targetHrp = targetChar:FindFirstChild("HumanoidRootPart")
+    local targetHum = targetChar:FindFirstChildOfClass("Humanoid")
+    if not targetHrp or not targetHum then return end
+    
+    -- 1. สั่งเปิดโหมดไร้แรงต้านทานการชน (ทะลุวัตถุ) ของทุกชิ้นส่วนในตัวละคร
+    for _, part in ipairs(targetChar:GetChildren()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = false
+        end
     end
-    WallFolder:ClearAllChildren()
-
-    if not GardenProtectionActive then return end
-
-    local myPlot = getMyPlot()
-    if not myPlot then return end
-
-    local plotCFrame, plotSize = myPlot:GetBoundingBox()
-    local sx, sz = plotSize.X, plotSize.Z
-    local height = 100 -- ความสูงกำแพง 100 เมตรตามที่กำหนด
-
-    -- กำหนดตำแหน่งแผ่นกำแพง 4 ทิศทางครอบคลุมพื้นที่พล็อต
-    local wallData = {
-        {CFrame = plotCFrame * CFrame.new(sx/2, height/2, 0), Size = Vector3.new(2, height, sz)},  -- ทิศขวา
-        {CFrame = plotCFrame * CFrame.new(-sx/2, height/2, 0), Size = Vector3.new(2, height, sz)}, -- ทิศซ้าย
-        {CFrame = plotCFrame * CFrame.new(0, height/2, sz/2), Size = Vector3.new(sx, height, 2)},  -- ทิศหน้า
-        {CFrame = plotCFrame * CFrame.new(0, height/2, -sz/2), Size = Vector3.new(sx, height, 2)}  -- ทิศหลัง
-    }
-
-    for _, data in ipairs(wallData) do
-        local wall = Instance.new("Part")
-        wall.Name = "InvisibleWallPart"
-        wall.Size = data.Size
-        wall.CFrame = data.CFrame
-        wall.Anchored = true
-        wall.Transparency = 1 -- ล่องหนแบบสมบูรณ์ไม่มีใครเห็น
-        wall.CanCollide = false -- คุมผ่านสคริปต์โซนเพื่อความแม่นยำในการคัดกรองคน
-        wall.CastShadow = false
-        wall.Parent = WallFolder
-    end
+    
+    -- 2. เปลี่ยนสถานะให้เป็นท่วงท่าร่วงหล่น เพื่อไม่ให้ระบบอนิเมชั่นพยายามดึงตัวยืนบนพื้น
+    targetHum:ChangeState(Enum.HumanoidStateType.FallingDown)
+    
+    -- 3. ผลักตำแหน่งแกน Y ลงใต้พื้นดินทันที 4 บล็อก เพื่อหลุดจากความหนาของแผ่นพล็อตผัก
+    targetHrp.Position = targetHrp.Position - Vector3.new(0, 4, 0)
 end
 
 local function runGardenProtectionLoop()
     while GardenProtectionActive do
         pcall(function()
             local myPlot = getMyPlot()
-            if myPlot then
-                local plotCFrame, plotSize = myPlot:GetBoundingBox()
-                local halfX = plotSize.X / 2
-                local halfZ = plotSize.Z / 2
-
-                for _, player in ipairs(Players:GetPlayers()) do
-                    -- คัดกรอง: ข้ามตัวเรา และข้ามคนที่มีชื่ออยู่ใน Whitelist
-                    if player ~= Players.LocalPlayer and not WhitelistedPlayers[player.Name] then
-                        local char = player.Character
-                        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                        
-                        if hrp then
-                            -- แปลงตำแหน่งผู้เล่นอื่นให้สัมพันธ์กับตำแหน่งพล็อตของเรา (Local Space)
-                            local localPos = plotCFrame:PointToObjectSpace(hrp.Position)
+            local visualFolder = myPlot and myPlot:FindFirstChild("Visual")
+            
+            if visualFolder then
+                local partsToCheck = {}
+                for _, obj in ipairs(visualFolder:GetDescendants()) do
+                    if obj:IsA("BasePart") then
+                        table.insert(partsToCheck, obj)
+                    end
+                end
+                
+                if #partsToCheck > 0 then
+                    for _, player in ipairs(Players:GetPlayers()) do
+                        if player ~= Players.LocalPlayer and not WhitelistedPlayers[player.Name] then
+                            local char = player.Character
+                            local hrp = char and char:FindFirstChild("HumanoidRootPart")
                             
-                            -- ตรวจสอบว่ายืนอยู่ในขอบเขตพล็อต XZ และความสูงของกำแพง 100 เมตรหรือไม่
-                            if math.abs(localPos.X) < halfX and math.abs(localPos.Z) < halfZ and localPos.Y > -5 and localPos.Y < 100 then
-                                -- คำนวณหาขอบกำแพงฝั่งที่ใกล้ที่สุดเพื่อดันเขากระเด้งกลับออกไปทันที
-                                local diffX = halfX - math.abs(localPos.X)
-                                local diffZ = halfZ - math.abs(localPos.Z)
-                                
-                                if diffX < diffZ then
-                                    if localPos.X > 0 then
-                                        localPos = Vector3.new(halfX + 3, localPos.Y, localPos.Z)
-                                    else
-                                        localPos = Vector3.new(-halfX - 3, localPos.Y, localPos.Z)
-                                    end
-                                else
-                                    if localPos.Z > 0 then
-                                        localPos = Vector3.new(localPos.X, localPos.Y, halfZ + 3)
-                                    else
-                                        localPos = Vector3.new(localPos.X, localPos.Y, -halfZ - 3)
+                            -- ตรวจเช็คว่า ตัวละครนี้ยังไม่เคยโดนเปิดโหมดร่วงหล่นมาก่อนในชีวิตนี้
+                            if hrp and not affectedCharacters[char] then
+                                for _, part in ipairs(partsToCheck) do
+                                    local distance = (hrp.Position - part.Position).Magnitude
+                                    -- เมื่อศัตรูเข้ามาใกล้ในระยะ 12 Studs
+                                    if distance < 12 then
+                                        -- เรียกฟังก์ชันเปิด Void Trap ทะลุลงใต้โลก
+                                        makePlayerFallThroughMap(char)
+                                        task.wait(0.1)
+                                        break
                                     end
                                 end
-                                
-                                -- ย้ายตำแหน่งเขากลับไปนอกขอบเขตกำแพงล่องหน
-                                hrp.CFrame = plotCFrame * CFrame.new(localPos)
                             end
                         end
                     end
                 end
             end
         end)
-        task.wait(0.02) -- ความถี่สูงพิเศษ ป้องกันคนนอกวิ่งสปีดรันฝ่ากำแพงเข้ามา
+        task.wait(0.1)
     end
 end
 
 Tabs.AutoNormal:AddToggle("GardenProtectionToggle", {
     Title = "Garden Protection",
-    Description = "สร้างกำแพงล่องหน 100 เมตร บล็อกผู้เล่นอื่นที่ไม่ใช่ Whitelist ไม่ให้ทะลุเข้าสวนผัก",
+    Description = "ฟังก์ชันปรับให้ผู้เล่นแปลกหน้าที่เข้าใกล้สวนร่วงทะลุลงใต้แมพ (โดนชีวิตละครั้ง)",
     Default = false,
     Callback = function(value)
         GardenProtectionActive = value
-        updateInvisibleWalls()
-        
         if value then
             if GardenProtectionThread then task.cancel(GardenProtectionThread) end
             GardenProtectionThread = task.spawn(runGardenProtectionLoop)
@@ -1381,7 +1354,7 @@ Tabs.AutoNormal:AddToggle("GardenProtectionToggle", {
             
             Fluent:Notify({
                 Title = "Garden Protection",
-                Content = "เปิดระบบกำแพงล่องหน 100 เมตรแล้ว! (พล็อต: " .. activePlotName .. ")",
+                Content = "เปิดระบบกับดักหลุมดำทะลุแมพ! (พล็อต: " .. activePlotName .. ")",
                 Duration = 4
             })
         else
@@ -1389,10 +1362,10 @@ Tabs.AutoNormal:AddToggle("GardenProtectionToggle", {
                 task.cancel(GardenProtectionThread) 
                 GardenProtectionThread = nil
             end
-            if WallFolder then WallFolder:ClearAllChildren() end
+            affectedCharacters = {} -- เคลียร์ตารางบันทึกเมื่อปิดการทำงาน
             Fluent:Notify({
                 Title = "Garden Protection",
-                Content = "ปิดระบบกำแพงคุ้มกันสวนเรียบร้อยแล้ว",
+                Content = "ปิดระบบคุ้มกันสวนผักเรียบร้อยแล้ว",
                 Duration = 4
             })
         end
