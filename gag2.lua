@@ -1280,10 +1280,12 @@ for _, animal in ipairs(AnimalOptions) do
     AnimalOptionsByLabel[label] = animal
 end
 
--- [จุดที่แก้ไขโครงสร้างแบบสมบูรณ์] เรียกใช้ฟังก์ชันผ่านตัวแปร Tab (Tabs.AutoNormal) โดยตรงทั้งหมด เพื่อป้องกันการ Error
-Tabs.AutoNormal:AddSection({ Title = "Garden Protection" })
+-- ========== [จุดแก้ไขโครงสร้างเมนู หน้า Auto Normal] ==========
+-- สร้างตัวแปรมารับค่า Section และส่งค่าเป็น String ข้อความตรงๆ เพื่อให้ระบบเอาไปเจนเนอเรทปุ่มลูกได้ถูกต้อง
+local ProtectionSection = Tabs.AutoNormal:AddSection("Garden Protection")
 
-Tabs.AutoNormal:AddToggle("CreateProtection", {
+-- เอาปุ่ม Toggle ไปผูกไว้กับตัวแปร Section ที่เราเพิ่งสร้าง
+ProtectionSection:AddToggle("CreateProtection", {
     Title = "Create Protection",
     Description = "สร้างการป้องกันสวน จากการขโมยผลไม้",
     Default = false,
@@ -1292,9 +1294,9 @@ Tabs.AutoNormal:AddToggle("CreateProtection", {
     end
 })
 
-Tabs.AutoNormal:AddSection({ Title = "Animals" })
+local AnimalsSection = Tabs.AutoNormal:AddSection("Animals")
 
-local NameAnimalsDropdown = Tabs.AutoNormal:AddDropdown("NameAnimals", {
+local NameAnimalsDropdown = AnimalsSection:AddDropdown("NameAnimals", {
     Title = "Name Animals",
     Values = AnimalOptionLabels,
     Multi = true,
@@ -1313,7 +1315,7 @@ NameAnimalsDropdown:OnChanged(function(value)
     end
 end)
 
-AutoAnimalsToggle = Tabs.AutoNormal:AddToggle("AutoAnimals", {
+AutoAnimalsToggle = AnimalsSection:AddToggle("AutoAnimals", {
     Title = "Auto Animals",
     Description = "ต้องเลือก Name Animals และมีเงินเพียงพอ",
     Default = false,
@@ -1321,6 +1323,8 @@ AutoAnimalsToggle = Tabs.AutoNormal:AddToggle("AutoAnimals", {
         setAutoAnimalsEnabled(value)
     end
 })
+
+-- =============================================================
 
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
