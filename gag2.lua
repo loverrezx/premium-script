@@ -1227,6 +1227,8 @@ AutoAnimalsToggle = Tabs.AutoNormal:AddToggle("AutoAnimals", {
     end
 })
 
+Tabs.AutoNormal:AddSection("Garden Protection")
+
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
 
