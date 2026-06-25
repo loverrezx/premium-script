@@ -1280,10 +1280,9 @@ for _, animal in ipairs(AnimalOptions) do
     AnimalOptionsByLabel[label] = animal
 end
 
--- สร้าง Section สำหรับ Garden Protection 
+-- [จุดที่แก้ไข] ปรับให้ Element (Toggle, Dropdown) ไปสร้างและผูกบน Tab (Tabs.AutoNormal) โดยตรง เพื่อไม่ให้ Fluent UI เกิดอาการสคริปต์หยุดทำงานกลางคัน (Crash)
 local ProtectionSection = Tabs.AutoNormal:AddSection({ Title = "Garden Protection" })
 
--- [แก้ไขสำเร็จ] เปลี่ยนมาผูกเข้ากับ Tabs.AutoNormal โดยตรงเพื่อให้ระบบ Fluent UI ประมวลผลได้
 Tabs.AutoNormal:AddToggle("CreateProtection", {
     Title = "Create Protection",
     Description = "สร้างการป้องกันสวน จากการขโมยผลไม้",
@@ -1293,10 +1292,8 @@ Tabs.AutoNormal:AddToggle("CreateProtection", {
     end
 })
 
--- สร้าง Section สำหรับ Animals
 local AnimalsSection = Tabs.AutoNormal:AddSection({ Title = "Animals" })
 
--- [แก้ไขสำเร็จ] เปลี่ยนมาผูกเข้ากับ Tabs.AutoNormal โดยตรงเช่นเดียวกัน
 local NameAnimalsDropdown = Tabs.AutoNormal:AddDropdown("NameAnimals", {
     Title = "Name Animals",
     Values = AnimalOptionLabels,
